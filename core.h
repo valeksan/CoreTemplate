@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QQueue>
+#include <QVariant>
 #include <QDebug>
 #include <QTimer>
 
