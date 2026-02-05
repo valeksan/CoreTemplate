@@ -59,7 +59,7 @@ See the `MainWindow` constructor in the provided `mainwindow.cpp` for a comprehe
     *   Signals: `startedTask`, `finishedTask`, `terminatedTask`.
 *   `TaskHelper`: Internal helper class for thread execution (usually not used directly).
 
-## Usage Example
+## Basic Example
 
 ```cpp
 #include "core.h"
@@ -98,6 +98,88 @@ int main(int argc, char *argv[])
 
     return app.exec();
 }
+```
+
+## Grouping Example
+
+```cpp
+#include "core.h"
+#include <QApplication>
+#include <QDebug>
+#include <QThread>
+#include <QTimer>
+
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
+
+    Core core;
+
+    // Define tasks for Group 1 (Resource A)
+    auto taskForResourceA1 = [](int id) -> int {
+        qDebug() << "Group 1 Task" << id << "- Starting on thread:" << QThread::currentThread();
+        QThread::msleep(2000); // Simulate work taking 2 seconds
+        qDebug() << "Group 1 Task" << id << "- Finished";
+        return id * 10;
+    };
+
+    auto taskForResourceA2 = [](int id) -> int {
+        qDebug() << "Group 1 Task" << id << "- Starting on thread:" << QThread::currentThread();
+        QThread::msleep(1000); // Simulate work taking 1 second
+        qDebug() << "Group 1 Task" << id << "- Finished";
+        return id * 20;
+    };
+
+    // Define a task for Group 2 (Resource B) - Can run concurrently with Group 1
+    auto taskForResourceB = [](int id) -> int {
+        qDebug() << "Group 2 Task" << id << "- Starting on thread:" << QThread::currentThread();
+        QThread::msleep(1500); // Simulate work taking 1.5 seconds
+        qDebug() << "Group 2 Task" << id << "- Finished";
+        return id * 30;
+    };
+
+    // Register tasks. Group 1 tasks will be serialized.
+    core.registerTask(1, taskForResourceA1, 1); // Task type 1, Group 1
+    core.registerTask(2, taskForResourceA2, 1); // Task type 2, Group 1
+    core.registerTask(3, taskForResourceB, 2);  // Task type 3, Group 2
+
+    QObject::connect(&core, &Core::finishedTask, [](long id, int type, const QVariantList &args, const QVariant &result) {
+        qDebug() << "Task completed - ID:" << id << "Type:" << type << "Group:" << args.first().toInt() << "Result:" << result;
+    });
+
+    // Add tasks
+    qDebug() << "Adding Group 1 Task 1 (ID: 10)";
+    core.addTask(1, 10); // Will start immediately
+
+    qDebug() << "Adding Group 1 Task 2 (ID: 20) - Should wait for Task 1";
+    core.addTask(2, 20); // Will wait in queue behind Task 1
+
+    qDebug() << "Adding Group 2 Task 1 (ID: 30) - Should start immediately, parallel to Group 1 Task 1";
+    core.addTask(3, 30); // Will start immediately as it's in Group 2
+
+    // Wait longer to ensure all tasks complete
+    QTimer timer;
+    timer.setSingleShot(true);
+    timer.start(6000); // Wait 6 seconds
+    QObject::connect(&timer, &QTimer::timeout, &app, &QApplication::quit);
+
+    return app.exec();
+}
+/* Expected Output (order might vary slightly due to timing):
+Adding Group 1 Task 1 (ID: 10)
+Adding Group 1 Task 2 (ID: 20) - Should wait for Task 1
+Adding Group 2 Task 1 (ID: 30) - Should start immediately, parallel to Group 1 Task 1
+Group 1 Task 10 - Starting on thread: QThread(0x...)
+Group 2 Task 30 - Starting on thread: QThread(0x...) 
+Group 2 Task 30 - Finished
+Task completed - ID: 2 Type: 3 Group: 2 Result: 900
+Group 1 Task 10 - Finished
+Task completed - ID: 0 Type: 1 Group: 1 Result: 100
+Group 1 Task 20 - Starting on thread: QThread(0x...) 
+Group 1 Task 20 - Finished
+Task completed - ID: 1 Type: 2 Group: 1 Result: 400
+*/
+```
 
 ## Contributing
 
