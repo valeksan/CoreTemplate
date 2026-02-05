@@ -36,6 +36,73 @@ See the `MainWindow` constructor in the provided `mainwindow.cpp` for a comprehe
 *   **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
 *   **Requirements:** Requires Qt 6.x (specifically tested against 6.10.2) and C++17 support.
 
+## Prerequisites
+
+*   Qt 5 or 6.x (tested with 6.10.2)
+*   C++17 compatible compiler
+
+## Installation
+
+1.  Clone or download this repository.
+2.  Copy the `core.h` file into your Qt project directory (or any preferred location within your source tree).
+3.  Include `core.h` in your source code file where you want to use the `Core` class (e.g., `#include "core.h"`).
+4.  Ensure your project is configured to use C++17 and Qt 6.x.
+
+## API Overview
+
+*   `Core`: Main class for task management.
+    *   `registerTask(...)`: Registers a callable as a task.
+    *   `addTask(...)`: Queues a registered task for execution.
+    *   `stopTaskById/ByType/ByGroup(...)`: Requests graceful stop.
+    *   `terminateTaskById(...)`: Forces immediate termination.
+    *   `isIdle()`, `isTaskRegistered()`, etc.: Query methods.
+    *   Signals: `startedTask`, `finishedTask`, `terminatedTask`.
+*   `TaskHelper`: Internal helper class for thread execution (usually not used directly).
+
+## Usage Example
+
+```cpp
+#include "core.h"
+#include <QApplication>
+#include <QDebug>
+
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
+
+    Core core;
+
+    // Define a simple task
+    auto simpleTask = [](int x) -> int {
+        qDebug() << "Running simple task with arg:" << x;
+        return x * 2;
+    };
+
+    // Register the task with type ID 1
+    core.registerTask(1, simpleTask);
+
+    // Connect to the finished signal to handle results
+    QObject::connect(&core, &Core::finishedTask, [](long id, int type, const QVariantList &args, const QVariant &result) {
+        qDebug() << "Task finished:" << id << "Type:" << type << "Args:" << args << "Result:" << result;
+    });
+
+    // Add the task for execution with argument 21
+    core.addTask(1, 21);
+
+    // Your application event loop would normally run here.
+    // For this example, we'll just wait a bit to see the task complete.
+    QTimer timer;
+    timer.setSingleShot(true);
+    timer.start(2000); // Wait 2 seconds
+    QObject::connect(&timer, &QTimer::timeout, &app, &QApplication::quit);
+
+    return app.exec();
+}
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+
 ## License
 
 MIT License
