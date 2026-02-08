@@ -254,14 +254,14 @@ void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...), Clas
     // Direct call to bind_placeholders and registerTask with explicit std::function signature
     auto boundFunc = bind_placeholders(taskMethod, taskObj, std::make_index_sequence<sizeof...(Args)>());
     // Use deduction guide for std::function
-    registerTask(taskType, static_cast<std::function<R(Args...)>>(boundFunc), taskGroup, taskStopTimeout);
+    registerTask(taskType, static_cast<std::function<R(Args...)>>(std::move(boundFunc)), taskGroup, taskStopTimeout);
 }
 
 template <typename Class, typename R, typename... Args>
 void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     auto boundFunc = bind_placeholders(taskMethod, taskObj, std::make_index_sequence<sizeof...(Args)>());
     // Use deduction guide for std::function
-    registerTask(taskType, static_cast<std::function<R(Args...)>>(boundFunc), taskGroup, taskStopTimeout);
+    registerTask(taskType, static_cast<std::function<R(Args...)>>(std::move(boundFunc)), taskGroup, taskStopTimeout);
 }
 
 // Generic overload (works for lambdas, functors)
@@ -295,7 +295,12 @@ void Core::addTask(TaskType taskType, Args... args) {
         }
 
         auto taskFunctionBound = std::bind(taskFunction, args...);
-        QSharedPointer<Task> pTask = QSharedPointer<Task>::create(taskFunctionBound, taskType, m_taskHash[taskType].m_group, argsList);
+        auto pTask = QSharedPointer<Task>::create(
+            std::move(taskFunctionBound),
+            taskType,
+            m_taskHash[taskType].m_group,
+            std::move(argsList)
+            );
 
         bool start = std::none_of(m_activeTaskList.begin(), m_activeTaskList.end(), [group = pTask->m_group](const auto& pActiveTask) {
             return pActiveTask->m_group == group;
@@ -304,7 +309,7 @@ void Core::addTask(TaskType taskType, Args... args) {
         if (start && !m_blockStartTask) {
             startTask(pTask);
         } else {
-            m_queuedTaskList.append(pTask);
+            m_queuedTaskList.append(std::move(pTask));
         }
     } catch (const std::bad_any_cast& e) {
         qWarning() << "Core::addTask - Bad arguments or function signature mismatch for task type:" << taskType << e.what();
@@ -328,30 +333,26 @@ inline std::atomic_bool* Core::stopTaskFlag() {
 }
 
 inline void Core::terminateTaskById(TaskId id) {
-    auto pTask = activeTaskById(id);
-    if (!pTask.isNull()) {
-        terminateTask(pTask);
+    if (auto pTask = activeTaskById(id); !pTask.isNull()) {
+        terminateTask(std::move(pTask));
     }
 }
 
 inline void Core::stopTaskById(TaskId id) {
-    auto pTask = activeTaskById(id);
-    if (!pTask.isNull()) {
-        stopTask(pTask);
+    if (auto pTask = activeTaskById(id); !pTask.isNull()) {
+        stopTask(std::move(pTask));
     }
 }
 
 inline void Core::stopTaskByType(TaskType type) {
-    auto pTask = activeTaskByType(type);
-    if (!pTask.isNull()) {
-        stopTask(pTask);
+    if (auto pTask = activeTaskByType(type); !pTask.isNull()) {
+        stopTask(std::move(pTask));
     }
 }
 
 inline void Core::stopTaskByGroup(TaskGroup group) {
-    auto pTask = activeTaskByGroup(group);
-    if (!pTask.isNull()) {
-        stopTask(pTask);
+    if (auto pTask = activeTaskByGroup(group); !pTask.isNull()) {
+        stopTask(std::move(pTask));
     }
 }
 
@@ -515,7 +516,7 @@ inline void Core::startQueuedTask() {
         });
         if (start) {
             it = m_queuedTaskList.erase(it);
-            startTask(pQueuedTask);
+            startTask(std::move(pQueuedTask));
         } else {
             ++it;
         }
