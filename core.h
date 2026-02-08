@@ -2,6 +2,7 @@
 #ifndef CORE_H
 #define CORE_H
 
+// --- Import Qt headers ---
 #include <QObject>
 #include <QQueue>
 #include <QVariant>
@@ -12,13 +13,7 @@
 #include <QDebug>
 #include <QTimer>
 
-#ifdef Q_OS_WIN
-#include <windows.h>
-#include <process.h>
-#else
-#include <pthread.h>
-#endif
-
+// --- Import the headers of the standard library ---
 #include <atomic>
 #include <functional>
 #include <any>
@@ -26,24 +21,29 @@
 #include <algorithm>
 #include <utility>
 
+#ifdef Q_OS_WIN
+    #include <windows.h>
+    #include <process.h>
+#else
+    #include <pthread.h>
+#endif
+
+// --- Using aliases to improve readability ---
+using TaskId = long;
+using TaskType = int;
+using TaskGroup = int;
+using QVariantList = QList<QVariant>; // Qt already provides, but for clarity
+using TaskStopTimeout = int; // ms
+
+// --- Declaring constants with macros ---
 #define STOP_ACTIVE_TASK_DEFAULT_TIMEOUT 1000
 
 // --- Templates for checking convertibility ---
-
-template<bool... Values>
-struct bool_pack {};
-
-template<bool... Values>
-using all_true = std::is_same<bool_pack<true, Values...>, bool_pack<Values..., true>>;
-
-template<bool... Values>
-constexpr bool all_true_v = all_true<Values...>::value;
-
 template<typename T>
 struct all_convertible_to {
     template<typename... Args>
     static constexpr bool check() {
-        return all_true_v<std::is_convertible_v<Args, T>...>;
+        return std::conjunction_v<std::is_convertible<Args, T>...>;
     }
 };
 
@@ -51,7 +51,7 @@ template<>
 struct all_convertible_to<QVariant> {
     template<typename... Args>
     static constexpr bool check() {
-        return all_true_v<(std::is_convertible_v<Args, QVariant> || QMetaTypeId<Args>::Defined)...>;
+        return std::conjunction_v<std::disjunction<std::is_convertible<Args, QVariant>, std::bool_constant<QMetaTypeId<Args>::Defined>>...>;
     }
 };
 
@@ -66,7 +66,6 @@ struct is_placeholder<::placeholder<N>> : public std::integral_constant<int, N> 
 /// @endcond
 
 // --- Helper functions for binding member methods ---
-
 template<typename R, typename... Args, typename Class, std::size_t... N>
 auto bind_placeholders(R (Class::*taskFunction)(Args...), Class* taskObj, std::index_sequence<N...>) {
     return std::bind(taskFunction, taskObj, placeholder<N + 1>()...);
@@ -78,7 +77,6 @@ auto bind_placeholders(R (Class::*taskFunction)(Args...) const, Class* taskObj, 
 }
 
 // --- Classes ---
-
 class TaskHelper : public QObject {
     Q_OBJECT
 
