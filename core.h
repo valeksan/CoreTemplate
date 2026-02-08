@@ -21,6 +21,7 @@
 #include <QDebug>
 #include <QTimer>
 
+// --- Threading/Multiprocessing API Headers ---
 #ifdef Q_OS_WIN
     #include <windows.h>
     #include <process.h>
@@ -150,7 +151,7 @@ private:
     };
 
     struct Task {
-        Task(std::function<QVariant()> functionBound, TaskType type, TaskGroup group, QVariantList argsList = {})
+        Task(std::function<QVariant()> functionBound, TaskType type, TaskGroup group, QList<QVariant> argsList = {})
             : m_functionBound(std::move(functionBound))
             , m_type(type)
             , m_group(group)
@@ -165,7 +166,7 @@ private:
         std::function<QVariant()> m_functionBound;
         TaskType m_type;
         TaskGroup m_group;
-        QVariantList m_argsList;
+        QList<QVariant> m_argsList;
     #ifdef Q_OS_WIN
         HANDLE m_threadHandle = nullptr;
         DWORD m_threadId = 0;
@@ -194,9 +195,9 @@ private:
     bool m_blockStartTask = false;
 
 signals:
-    void finishedTask(TaskId id, TaskType type, QVariantList argsList = QVariantList(), QVariant result = QVariant());
-    void startedTask(TaskId id, TaskType type, QVariantList argsList = QVariantList());
-    void terminatedTask(TaskId id, TaskType type, QVariantList argsList = QVariantList());
+    void finishedTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, QVariant result = QVariant());
+    void startedTask(TaskId id, TaskType type, QList<QVariant> argsList = {});
+    void terminatedTask(TaskId id, TaskType type, QList<QVariant> argsList = {});
 };
 
 // --- Class method implementations *after* class declarations ---
@@ -296,11 +297,11 @@ void Core::addTask(TaskType taskType, Args... args) {
         auto storedFuncAny = m_taskHash[taskType].m_function;
         auto taskFunction = std::any_cast<std::function<QVariant(Args...)>>(storedFuncAny);
 
-        QVariantList argsList;
+        QList<QVariant> argsList;
         if constexpr (all_convertible_to<QVariant>::check<Args...>()) {
             argsList = { QVariant::fromValue(args)... };
         } else {
-            qWarning() << "Core::addTask - Arguments are not convertible to QVariantList for task type:" << taskType;
+            qWarning() << "Core::addTask - Arguments are not convertible to QList<QVariant> for task type:" << taskType;
         }
 
         auto taskFunctionBound = std::bind(taskFunction, args...);
@@ -508,9 +509,28 @@ inline void Core::startTask(QSharedPointer<Core::Task> pTask) {
     });
 
 #ifdef Q_OS_WIN
-    pTask->m_threadHandle = CreateThread(nullptr, 0, &TaskHelper::functionWrapper, reinterpret_cast<void*>(pTaskHelper), 0, &pTask->m_threadId);
+    pTask->m_threadHandle = CreateThread(nullptr, 0, &TaskHelper::functionWrapper, pTaskHelper, 0, &pTask->m_threadId);
+    if (pTask->m_threadHandle == NULL) {
+        qWarning() << "Core::startTask - Failed to create thread for task ID:" << pTask->m_id << ". GetLastError:" << GetLastError();
+        m_activeTaskList.removeAll(pTask);
+        // emit taskCreationFailed(...);
+        startQueuedTask();
+        pTaskHelper->deleteLater();
+        return; // Abort StartTask execution
+    }
+    // If everything is OK, continue...
 #else
-    pthread_create(&pTask->m_threadHandle, nullptr, &TaskHelper::functionWrapper, pTaskHelper);
+    // Checking pthread_create
+    int result = pthread_create(&pTask->m_threadHandle, nullptr, &TaskHelper::functionWrapper, pTaskHelper);
+    if (result != 0) {
+        qWarning() << "Core::startTask - Failed to create thread for task ID:" << pTask->m_id << ". Error code:" << result;
+        m_activeTaskList.removeAll(pTask);
+        // emit taskCreationFailed(...);
+        startQueuedTask();
+        pTaskHelper->deleteLater();
+        return; // Abort StartTask execution
+    }
+    // If everything is OK, continue...
     pthread_detach(pTask->m_threadHandle);
 #endif
 
