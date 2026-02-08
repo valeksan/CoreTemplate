@@ -136,11 +136,11 @@ public:
     bool isTaskAddedByGroup(TaskGroup group, bool* isActive = nullptr);
 
 private:
-    enum TaskState {
-        INACTIVE,
-        ACTIVE,
-        FINISHED,
-        TERMINATED
+    enum class TaskState {
+        Inactive,
+        Active,
+        Finished,
+        Terminated
     };
 
     struct TaskInfo {
@@ -462,7 +462,7 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
 #else
     pthread_cancel(pTask->m_threadHandle);
 #endif
-    pTask->m_state = TERMINATED;
+    pTask->m_state = TaskState::Terminated;
     emit terminatedTask(pTask->m_id, pTask->m_type, pTask->m_argsList);
     m_activeTaskList.removeAll(pTask);
     startQueuedTask();
@@ -472,13 +472,13 @@ inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
     pTask->m_stopFlag.store(true);
     QTimer::singleShot(m_taskHash[pTask->m_type].m_stopTimeout, this, [this, pTask]() {
         switch (pTask->m_state) {
-        case FINISHED:
+        case TaskState::Finished:
             qDebug() << QString("Task %1 was successfully stopped").arg(QString::number(pTask->m_id));
             break;
-        case TERMINATED:
+        case TaskState::Terminated:
             qDebug() << QString("Task %1 was terminated").arg(QString::number(pTask->m_id));
             break;
-        case ACTIVE:
+        case TaskState::Active:
             qDebug() << QString("Task %1 was not stopped, terminating").arg(QString::number(pTask->m_id));
             terminateTask(pTask);
             break;
@@ -491,11 +491,11 @@ inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
 
 inline void Core::startTask(QSharedPointer<Core::Task> pTask) {
     m_activeTaskList.append(pTask);
-    pTask->m_state = ACTIVE;
+    pTask->m_state = TaskState::Active;
     TaskHelper* pTaskHelper = new TaskHelper(pTask->m_functionBound, this); // Add with parent!
 
     connect(pTaskHelper, &TaskHelper::finished, this, [this, pTask, pTaskHelper](QVariant result) {
-        pTask->m_state = FINISHED;
+        pTask->m_state = TaskState::Finished;
         emit finishedTask(pTask->m_id, pTask->m_type, pTask->m_argsList, result);
         m_activeTaskList.removeAll(pTask);
         startQueuedTask();
@@ -543,7 +543,7 @@ inline Core::Task::Task(std::function<QVariant()> functionBound, TaskType type, 
     static TaskId id = 0;
     m_id = id++;
     m_stopFlag.store(false);
-    m_state = INACTIVE;
+    m_state = TaskState::Inactive;
 }
 
 #endif // CORE_H
