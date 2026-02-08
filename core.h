@@ -297,8 +297,8 @@ void Core::addTask(TaskType taskType, Args... args) {
         auto taskFunctionBound = std::bind(taskFunction, args...);
         QSharedPointer<Task> pTask = QSharedPointer<Task>::create(taskFunctionBound, taskType, m_taskHash[taskType].m_group, argsList);
 
-        bool start = std::all_of(m_activeTaskList.begin(), m_activeTaskList.end(), [pTask](QSharedPointer<Task> pActiveTask) {
-            return pTask->m_group != pActiveTask->m_group;
+        bool start = std::none_of(m_activeTaskList.begin(), m_activeTaskList.end(), [group = pTask->m_group](const auto& pActiveTask) {
+            return pActiveTask->m_group == group;
         });
 
         if (start && !m_blockStartTask) {
@@ -313,16 +313,16 @@ void Core::addTask(TaskType taskType, Args... args) {
 }
 
 inline std::atomic_bool* Core::stopTaskFlag() {
-    for (auto& task : m_activeTaskList) {
-#ifdef Q_OS_WIN
-        if (task->m_threadId == GetCurrentThreadId()) {
-            return &task->m_stopFlag;
-        }
-#else
-        if (pthread_equal(pthread_self(), task->m_threadHandle)) {
-            return &task->m_stopFlag;
-        }
-#endif
+    auto it = std::find_if(m_activeTaskList.begin(), m_activeTaskList.end(), [](const auto& task) {
+        #ifdef Q_OS_WIN
+        return task->m_threadId == GetCurrentThreadId();
+        #else
+        return pthread_equal(pthread_self(), task->m_threadHandle);
+        #endif
+    });
+
+    if (it != m_activeTaskList.end()) {
+        return &(*it)->m_stopFlag;
     }
     return nullptr;
 }
@@ -357,24 +357,28 @@ inline void Core::stopTaskByGroup(TaskGroup group) {
 
 inline void Core::stopTasks() {
     m_blockStartTask = true;
-    QTimer* pTimer = new QTimer(this); // Add parent
+    QTimer* pTimer = new QTimer(this); // with parent for automatic cleanup!
     connect(pTimer, &QTimer::timeout, this, [this, pTimer]() {
-        if (m_activeTaskList.isEmpty()) {
+        if (isIdle()) { // Use the public method
             m_blockStartTask = false;
             pTimer->stop();
             pTimer->deleteLater();
         }
     });
 
-    TaskStopTimeout stopTasksTimeout = 0;
-    for (auto& pTask : m_activeTaskList) {
-        TaskStopTimeout stopTaskTimeout = m_taskHash[pTask->m_type].m_stopTimeout;
-        if (stopTaskTimeout > stopTasksTimeout) {
-            stopTasksTimeout = stopTaskTimeout;
-        }
+    // Calculating the maximum stop timeout among active tasks
+    TaskStopTimeout maxTimeout = 0;
+    for (const auto& pTask : m_activeTaskList) { // range-based for
+        maxTimeout = std::max(maxTimeout, m_taskHash[pTask->m_type].m_stopTimeout);
+    }
+
+    // Requesting to stop all active tasks
+    for (const auto& pTask : m_activeTaskList) { // range-based for
         stopTask(pTask);
     }
-    pTimer->start(stopTasksTimeout);
+
+    // Starting the timer with the maximum timeout
+    pTimer->start(maxTimeout);
 }
 
 inline bool Core::isTaskRegistered(TaskType type) {
@@ -396,13 +400,13 @@ inline bool Core::isIdle() {
 }
 
 inline bool Core::isTaskAddedByType(TaskType type, bool* isActive) {
-    for (auto& pTask : m_activeTaskList) {
+    for (const auto& pTask : m_activeTaskList) {
         if (pTask->m_type == type) {
             if (isActive) *isActive = true;
             return true;
         }
     }
-    for (auto& pTask : m_queuedTaskList) {
+    for (const auto& pTask : m_queuedTaskList) {
         if (pTask->m_type == type) {
             if (isActive) *isActive = false;
             return true;
@@ -412,13 +416,13 @@ inline bool Core::isTaskAddedByType(TaskType type, bool* isActive) {
 }
 
 inline bool Core::isTaskAddedByGroup(TaskGroup group, bool* isActive) {
-    for (auto& pTask : m_activeTaskList) {
+    for (const auto& pTask : m_activeTaskList) {
         if (pTask->m_group == group) {
             if (isActive) *isActive = true;
             return true;
         }
     }
-    for (auto& pTask : m_queuedTaskList) {
+    for (const auto& pTask : m_queuedTaskList) {
         if (pTask->m_group == group) {
             if (isActive) *isActive = false;
             return true;
@@ -430,30 +434,21 @@ inline bool Core::isTaskAddedByGroup(TaskGroup group, bool* isActive) {
 // --- Internal method implementations (inline) ---
 
 inline QSharedPointer<Core::Task> Core::activeTaskById(TaskId id) {
-    for (auto& pTask : m_activeTaskList) {
-        if (pTask->m_id == id) {
-            return pTask;
-        }
-    }
-    return nullptr;
+    auto it = std::find_if(m_activeTaskList.begin(), m_activeTaskList.end(),
+                           [id](const auto& pTask) { return pTask->m_id == id; }); // range-based for -> find_if
+    return (it != m_activeTaskList.end()) ? *it : QSharedPointer<Task>{};
 }
 
 inline QSharedPointer<Core::Task> Core::activeTaskByType(TaskType type) {
-    for (auto& pTask : m_activeTaskList) {
-        if (pTask->m_type == type) {
-            return pTask;
-        }
-    }
-    return nullptr;
+    auto it = std::find_if(m_activeTaskList.begin(), m_activeTaskList.end(),
+                           [type](const auto& pTask) { return pTask->m_type == type; });
+    return (it != m_activeTaskList.end()) ? *it : QSharedPointer<Task>{};
 }
 
 inline QSharedPointer<Core::Task> Core::activeTaskByGroup(TaskGroup group) {
-    for (auto& pTask : m_activeTaskList) {
-        if (pTask->m_group == group) {
-            return pTask;
-        }
-    }
-    return nullptr;
+    auto it = std::find_if(m_activeTaskList.begin(), m_activeTaskList.end(),
+                           [group](const auto& pTask) { return pTask->m_group == group; });
+    return (it != m_activeTaskList.end()) ? *it : QSharedPointer<Task>{};
 }
 
 inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
