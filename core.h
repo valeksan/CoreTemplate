@@ -150,20 +150,29 @@ private:
     };
 
     struct Task {
-        Task(std::function<QVariant()> functionBound, TaskType type, TaskGroup group, QVariantList argsList = QVariantList());
+        Task(std::function<QVariant()> functionBound, TaskType type, TaskGroup group, QVariantList argsList = {})
+            : m_functionBound(std::move(functionBound))
+            , m_type(type)
+            , m_group(group)
+            , m_argsList(std::move(argsList))
+            , m_state(TaskState::Inactive) {
+
+            static TaskId id_counter = 0;
+            m_id = id_counter++; // m_id cannot be initialized in the list, because it depends on the counter
+        }
 
         TaskId m_id;
         std::function<QVariant()> m_functionBound;
         TaskType m_type;
         TaskGroup m_group;
         QVariantList m_argsList;
-#ifdef Q_OS_WIN
-        HANDLE m_threadHandle;
-        DWORD m_threadId;
-#else
-        pthread_t m_threadHandle;
-#endif
-        std::atomic_bool m_stopFlag;
+    #ifdef Q_OS_WIN
+        HANDLE m_threadHandle = nullptr;
+        DWORD m_threadId = 0;
+    #else
+        pthread_t m_threadHandle = 0;
+    #endif
+        std::atomic_bool m_stopFlag{false};
         TaskState m_state;
     };
 
@@ -182,7 +191,7 @@ private:
     QHash<TaskType, TaskInfo> m_taskHash;
     QList<QSharedPointer<Task>> m_activeTaskList;
     QList<QSharedPointer<Task>> m_queuedTaskList;
-    bool m_blockStartTask;
+    bool m_blockStartTask = false;
 
 signals:
     void finishedTask(TaskId id, TaskType type, QVariantList argsList = QVariantList(), QVariant result = QVariant());
@@ -216,7 +225,7 @@ inline void* TaskHelper::functionWrapper(void* pTaskHelper) {
 
 // Core Implementation
 inline Core::Core(QObject* parent)
-    : QObject(parent), m_blockStartTask(false) {}
+    : QObject(parent) {}
 
 template <typename R, typename... Args>
 void Core::registerTask(TaskType taskType, std::function<R(Args...)> taskFunction, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
@@ -530,16 +539,6 @@ void Core::insertToTaskHash(TaskType taskType, std::function<QVariant(Args...)> 
         throw std::logic_error("Task type is already registered");
     }
     m_taskHash.insert(taskType, TaskInfo{taskFunction, taskGroup, taskStopTimeout});
-}
-
-// --- Task implementation (inline) ---
-
-inline Core::Task::Task(std::function<QVariant()> functionBound, TaskType type, TaskGroup group, QVariantList argsList)
-    : m_functionBound(functionBound), m_type(type), m_group(group), m_argsList(argsList) {
-    static TaskId id = 0;
-    m_id = id++;
-    m_stopFlag.store(false);
-    m_state = TaskState::Inactive;
 }
 
 #endif // CORE_H
