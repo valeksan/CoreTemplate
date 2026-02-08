@@ -77,7 +77,7 @@ auto bind_placeholders(R (Class::*taskFunction)(Args...) const, Class* taskObj, 
 }
 
 // --- Classes ---
-class TaskHelper : public QObject {
+class TaskHelper final : public QObject {
     Q_OBJECT
 
 public:
@@ -97,6 +97,13 @@ signals:
     void finished(QVariant result);
 };
 
+/**
+ * @brief The Core class manages task execution in separate threads.
+ *
+ * IMPORTANT: All public methods of this class (e.g., addTask, stopTaskById, etc.)
+ * must be called from the same thread where the Core object lives (typically the main GUI thread).
+ * Calling these methods from task threads concurrently may lead to undefined behavior.
+ */
 class Core : public QObject {
     Q_OBJECT
 
@@ -192,7 +199,7 @@ private:
     QHash<TaskType, TaskInfo> m_taskHash;
     QList<QSharedPointer<Task>> m_activeTaskList;
     QList<QSharedPointer<Task>> m_queuedTaskList;
-    bool m_blockStartTask = false;
+    std::atomic_bool m_blockStartTask{false};
 
 signals:
     void finishedTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, QVariant result = QVariant());
@@ -316,7 +323,7 @@ void Core::addTask(TaskType taskType, Args... args) {
             return pActiveTask->m_group == group;
         });
 
-        if (start && !m_blockStartTask) {
+        if (start && !m_blockStartTask.load()) {
             startTask(pTask);
         } else {
             m_queuedTaskList.append(std::move(pTask));
@@ -327,7 +334,7 @@ void Core::addTask(TaskType taskType, Args... args) {
     }
 }
 
-inline std::atomic_bool* Core::stopTaskFlag() {
+[[nodiscard]] inline std::atomic_bool* Core::stopTaskFlag() {
     auto it = std::find_if(m_activeTaskList.begin(), m_activeTaskList.end(), [](const auto& task) {
         #ifdef Q_OS_WIN
         return task->m_threadId == GetCurrentThreadId();
@@ -367,11 +374,11 @@ inline void Core::stopTaskByGroup(TaskGroup group) {
 }
 
 inline void Core::stopTasks() {
-    m_blockStartTask = true;
+    m_blockStartTask.store(true);
     QTimer* pTimer = new QTimer(this); // with parent for automatic cleanup!
     connect(pTimer, &QTimer::timeout, this, [this, pTimer]() {
         if (isIdle()) { // Use the public method
-            m_blockStartTask = false;
+            m_blockStartTask.store(false);
             pTimer->stop();
             pTimer->deleteLater();
         }
@@ -392,7 +399,7 @@ inline void Core::stopTasks() {
     pTimer->start(maxTimeout);
 }
 
-inline bool Core::isTaskRegistered(TaskType type) {
+[[nodiscard]] inline bool Core::isTaskRegistered(TaskType type) {
     return m_taskHash.contains(type);
 }
 
@@ -406,11 +413,11 @@ inline TaskGroup Core::groupByTask(TaskType type, bool* ok) {
     }
 }
 
-inline bool Core::isIdle() {
+[[nodiscard]] inline bool Core::isIdle() {
     return m_activeTaskList.isEmpty();
 }
 
-inline bool Core::isTaskAddedByType(TaskType type, bool* isActive) {
+[[nodiscard]] inline bool Core::isTaskAddedByType(TaskType type, bool* isActive) {
     for (const auto& pTask : std::as_const(m_activeTaskList)) {
         if (pTask->m_type == type) {
             if (isActive) *isActive = true;
@@ -426,7 +433,7 @@ inline bool Core::isTaskAddedByType(TaskType type, bool* isActive) {
     return false;
 }
 
-inline bool Core::isTaskAddedByGroup(TaskGroup group, bool* isActive) {
+[[nodiscard]] inline bool Core::isTaskAddedByGroup(TaskGroup group, bool* isActive) {
     for (const auto& pTask : std::as_const(m_activeTaskList)) {
         if (pTask->m_group == group) {
             if (isActive) *isActive = true;
