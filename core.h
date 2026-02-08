@@ -32,11 +32,10 @@
 using TaskId = long;
 using TaskType = int;
 using TaskGroup = int;
-using QVariantList = QList<QVariant>; // Qt already provides, but for clarity
 using TaskStopTimeout = int; // ms
 
 // --- Declaring constants with macros ---
-#define STOP_ACTIVE_TASK_DEFAULT_TIMEOUT 1000
+#define DEFAULT_STOP_TIMEOUT 1000
 
 // --- Templates for checking convertibility ---
 template<typename T>
@@ -104,37 +103,37 @@ public:
     explicit Core(QObject* parent = nullptr);
 
     template <typename R, typename... Args>
-    void registerTask(int taskType, std::function<R(Args...)> taskFunction, int taskGroup = 0, int taskStopTimeout = 1000);
+    void registerTask(TaskType taskType, std::function<R(Args...)> taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
 
     template <typename R, typename... Args>
-    void registerTask(int taskType, R (*taskFunction)(Args...), int taskGroup = 0, int taskStopTimeout = 1000);
+    void registerTask(TaskType taskType, R (*taskFunction)(Args...), TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
 
     template <typename Class, typename R, typename... Args>
-    void registerTask(int taskType, R (Class::*taskMethod)(Args...), Class* taskObj, int taskGroup = 0, int taskStopTimeout = 1000);
+    void registerTask(TaskType taskType, R (Class::*taskMethod)(Args...), Class* taskObj, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
 
     template <typename Class, typename R, typename... Args>
-    void registerTask(int taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, int taskGroup = 0, int taskStopTimeout = 1000);
+    void registerTask(TaskType taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
 
     // More generic overload (for lambdas, functors, results of std::bind)
     template <typename F>
-    void registerTask(int taskType, F&& taskFunction, int taskGroup = 0, int taskStopTimeout = 1000);
+    void registerTask(TaskType taskType, F&& taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
 
-    bool unregisterTask(int taskType);
+    bool unregisterTask(TaskType taskType);
 
     template <typename... Args>
-    void addTask(int taskType, Args... args);
+    void addTask(TaskType taskType, Args... args);
 
     std::atomic_bool* stopTaskFlag();
-    void terminateTaskById(long id);
-    void stopTaskById(long id);
-    void stopTaskByType(int type);
-    void stopTaskByGroup(int group);
+    void terminateTaskById(TaskId id);
+    void stopTaskById(TaskId id);
+    void stopTaskByType(TaskType type);
+    void stopTaskByGroup(TaskGroup group);
     void stopTasks();
-    bool isTaskRegistered(int type);
-    int groupByTask(int type, bool* ok = nullptr);
+    bool isTaskRegistered(TaskType type);
+    TaskGroup groupByTask(TaskType type, bool* ok = nullptr);
     bool isIdle();
-    bool isTaskAddedByType(int type, bool* isActive = nullptr);
-    bool isTaskAddedByGroup(int group, bool* isActive = nullptr);
+    bool isTaskAddedByType(TaskType type, bool* isActive = nullptr);
+    bool isTaskAddedByGroup(TaskGroup group, bool* isActive = nullptr);
 
 private:
     enum TaskState {
@@ -146,17 +145,17 @@ private:
 
     struct TaskInfo {
         std::any m_function;
-        int m_group;
-        int m_stopTimeout;
+        TaskGroup m_group;
+        TaskStopTimeout m_stopTimeout;
     };
 
     struct Task {
-        Task(std::function<QVariant()> functionBound, int type, int group, QVariantList argsList = QVariantList());
+        Task(std::function<QVariant()> functionBound, TaskType type, TaskGroup group, QVariantList argsList = QVariantList());
 
-        long m_id;
+        TaskId m_id;
         std::function<QVariant()> m_functionBound;
-        int m_type;
-        int m_group;
+        TaskType m_type;
+        TaskGroup m_group;
         QVariantList m_argsList;
 #ifdef Q_OS_WIN
         HANDLE m_threadHandle;
@@ -168,9 +167,9 @@ private:
         TaskState m_state;
     };
 
-    QSharedPointer<Task> activeTaskById(long id);
-    QSharedPointer<Task> activeTaskByType(int type);
-    QSharedPointer<Task> activeTaskByGroup(int group);
+    QSharedPointer<Task> activeTaskById(TaskId id);
+    QSharedPointer<Task> activeTaskByType(TaskType type);
+    QSharedPointer<Task> activeTaskByGroup(TaskGroup group);
 
     void terminateTask(QSharedPointer<Task> pTask);
     void stopTask(QSharedPointer<Task> pTask);
@@ -178,21 +177,20 @@ private:
     void startQueuedTask();
 
     template <typename... Args>
-    void insertToTaskHash(int taskType, std::function<QVariant(Args...)> taskFunction, int taskGroup = 0, int taskStopTimeout = 1000);
+    void insertToTaskHash(TaskType taskType, std::function<QVariant(Args...)> taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
 
-    QHash<int, TaskInfo> m_taskHash;
+    QHash<TaskType, TaskInfo> m_taskHash;
     QList<QSharedPointer<Task>> m_activeTaskList;
     QList<QSharedPointer<Task>> m_queuedTaskList;
     bool m_blockStartTask;
 
 signals:
-    void finishedTask(long id, int type, QVariantList argsList = QVariantList(), QVariant result = QVariant());
-    void startedTask(long id, int type, QVariantList argsList = QVariantList());
-    void terminatedTask(long id, int type, QVariantList argsList = QVariantList());
+    void finishedTask(TaskId id, TaskType type, QVariantList argsList = QVariantList(), QVariant result = QVariant());
+    void startedTask(TaskId id, TaskType type, QVariantList argsList = QVariantList());
+    void terminatedTask(TaskId id, TaskType type, QVariantList argsList = QVariantList());
 };
 
 // --- Class method implementations *after* class declarations ---
-// Using inline to avoid duplicate symbols
 
 // TaskHelper Implementation
 inline TaskHelper::TaskHelper(std::function<QVariant()> function, QObject* parent)
@@ -205,13 +203,13 @@ inline void TaskHelper::execute() {
 #ifdef Q_OS_WIN
 inline DWORD TaskHelper::functionWrapper(void* pTaskHelper) {
     TaskHelper *pThisTaskHelper = qobject_cast<TaskHelper *>(reinterpret_cast<QObject *>(pTaskHelper));
-    if(pThisTaskHelper) pThisTaskHelper->execute();
+    if (pThisTaskHelper) pThisTaskHelper->execute();
     return 0;
 }
 #else
 inline void* TaskHelper::functionWrapper(void* pTaskHelper) {
     TaskHelper *pThisTaskHelper = qobject_cast<TaskHelper *>(reinterpret_cast<QObject *>(pTaskHelper));
-    if(pThisTaskHelper) pThisTaskHelper->execute();
+    if (pThisTaskHelper) pThisTaskHelper->execute();
     return nullptr;
 }
 #endif
@@ -221,7 +219,7 @@ inline Core::Core(QObject* parent)
     : QObject(parent), m_blockStartTask(false) {}
 
 template <typename R, typename... Args>
-void Core::registerTask(int taskType, std::function<R(Args...)> taskFunction, int taskGroup, int taskStopTimeout) {
+void Core::registerTask(TaskType taskType, std::function<R(Args...)> taskFunction, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     std::function<QVariant(std::remove_reference_t<Args>...)> f;
 
     if constexpr (std::is_void_v<R>) {
@@ -246,12 +244,12 @@ void Core::registerTask(int taskType, std::function<R(Args...)> taskFunction, in
 }
 
 template <typename R, typename... Args>
-void Core::registerTask(int taskType, R (*taskFunction)(Args...), int taskGroup, int taskStopTimeout) {
+void Core::registerTask(TaskType taskType, R (*taskFunction)(Args...), TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     registerTask(taskType, std::function<R(Args...)>(taskFunction), taskGroup, taskStopTimeout);
 }
 
 template <typename Class, typename R, typename... Args>
-void Core::registerTask(int taskType, R (Class::*taskMethod)(Args...), Class* taskObj, int taskGroup, int taskStopTimeout) {
+void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...), Class* taskObj, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     // Direct call to bind_placeholders and registerTask with explicit std::function signature
     auto boundFunc = bind_placeholders(taskMethod, taskObj, std::make_index_sequence<sizeof...(Args)>());
     // Explicitly specify std::function type for the result of std::bind
@@ -260,7 +258,7 @@ void Core::registerTask(int taskType, R (Class::*taskMethod)(Args...), Class* ta
 }
 
 template <typename Class, typename R, typename... Args>
-void Core::registerTask(int taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, int taskGroup, int taskStopTimeout) {
+void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     auto boundFunc = bind_placeholders(taskMethod, taskObj, std::make_index_sequence<sizeof...(Args)>());
     std::function<R(Args...)> func = boundFunc;
     registerTask(taskType, func, taskGroup, taskStopTimeout);
@@ -268,18 +266,18 @@ void Core::registerTask(int taskType, R (Class::*taskMethod)(Args...) const, Cla
 
 // Generic overload (works for lambdas, functors)
 template <typename F>
-void Core::registerTask(int taskType, F&& taskFunction, int taskGroup, int taskStopTimeout) {
+void Core::registerTask(TaskType taskType, F&& taskFunction, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     // Try to convert to std::function, relying on template argument deduction
     // This works if F has an operator() with a unique signature
     registerTask(taskType, std::function(std::forward<F>(taskFunction)), taskGroup, taskStopTimeout);
 }
 
-inline bool Core::unregisterTask(int taskType) {
+inline bool Core::unregisterTask(TaskType taskType) {
     return m_taskHash.remove(taskType) > 0;
 }
 
 template <typename... Args>
-void Core::addTask(int taskType, Args... args) {
+void Core::addTask(TaskType taskType, Args... args) {
     if (!m_taskHash.contains(taskType)) {
         qWarning() << "Core::addTask - Task not registered for type:" << taskType;
         throw std::logic_error("Task not registered");
@@ -329,28 +327,28 @@ inline std::atomic_bool* Core::stopTaskFlag() {
     return nullptr;
 }
 
-inline void Core::terminateTaskById(long id) {
+inline void Core::terminateTaskById(TaskId id) {
     auto pTask = activeTaskById(id);
     if (!pTask.isNull()) {
         terminateTask(pTask);
     }
 }
 
-inline void Core::stopTaskById(long id) {
+inline void Core::stopTaskById(TaskId id) {
     auto pTask = activeTaskById(id);
     if (!pTask.isNull()) {
         stopTask(pTask);
     }
 }
 
-inline void Core::stopTaskByType(int type) {
+inline void Core::stopTaskByType(TaskType type) {
     auto pTask = activeTaskByType(type);
     if (!pTask.isNull()) {
         stopTask(pTask);
     }
 }
 
-inline void Core::stopTaskByGroup(int group) {
+inline void Core::stopTaskByGroup(TaskGroup group) {
     auto pTask = activeTaskByGroup(group);
     if (!pTask.isNull()) {
         stopTask(pTask);
@@ -368,9 +366,9 @@ inline void Core::stopTasks() {
         }
     });
 
-    int stopTasksTimeout = 0;
+    TaskStopTimeout stopTasksTimeout = 0;
     for (auto& pTask : m_activeTaskList) {
-        int stopTaskTimeout = m_taskHash[pTask->m_type].m_stopTimeout;
+        TaskStopTimeout stopTaskTimeout = m_taskHash[pTask->m_type].m_stopTimeout;
         if (stopTaskTimeout > stopTasksTimeout) {
             stopTasksTimeout = stopTaskTimeout;
         }
@@ -379,11 +377,11 @@ inline void Core::stopTasks() {
     pTimer->start(stopTasksTimeout);
 }
 
-inline bool Core::isTaskRegistered(int type) {
+inline bool Core::isTaskRegistered(TaskType type) {
     return m_taskHash.contains(type);
 }
 
-inline int Core::groupByTask(int type, bool* ok) {
+inline TaskGroup Core::groupByTask(TaskType type, bool* ok) {
     if (isTaskRegistered(type)) {
         if (ok) *ok = true;
         return m_taskHash[type].m_group;
@@ -397,7 +395,7 @@ inline bool Core::isIdle() {
     return m_activeTaskList.isEmpty();
 }
 
-inline bool Core::isTaskAddedByType(int type, bool* isActive) {
+inline bool Core::isTaskAddedByType(TaskType type, bool* isActive) {
     for (auto& pTask : m_activeTaskList) {
         if (pTask->m_type == type) {
             if (isActive) *isActive = true;
@@ -413,7 +411,7 @@ inline bool Core::isTaskAddedByType(int type, bool* isActive) {
     return false;
 }
 
-inline bool Core::isTaskAddedByGroup(int group, bool* isActive) {
+inline bool Core::isTaskAddedByGroup(TaskGroup group, bool* isActive) {
     for (auto& pTask : m_activeTaskList) {
         if (pTask->m_group == group) {
             if (isActive) *isActive = true;
@@ -431,7 +429,7 @@ inline bool Core::isTaskAddedByGroup(int group, bool* isActive) {
 
 // --- Internal method implementations (inline) ---
 
-inline QSharedPointer<Core::Task> Core::activeTaskById(long id) {
+inline QSharedPointer<Core::Task> Core::activeTaskById(TaskId id) {
     for (auto& pTask : m_activeTaskList) {
         if (pTask->m_id == id) {
             return pTask;
@@ -440,7 +438,7 @@ inline QSharedPointer<Core::Task> Core::activeTaskById(long id) {
     return nullptr;
 }
 
-inline QSharedPointer<Core::Task> Core::activeTaskByType(int type) {
+inline QSharedPointer<Core::Task> Core::activeTaskByType(TaskType type) {
     for (auto& pTask : m_activeTaskList) {
         if (pTask->m_type == type) {
             return pTask;
@@ -449,7 +447,7 @@ inline QSharedPointer<Core::Task> Core::activeTaskByType(int type) {
     return nullptr;
 }
 
-inline QSharedPointer<Core::Task> Core::activeTaskByGroup(int group) {
+inline QSharedPointer<Core::Task> Core::activeTaskByGroup(TaskGroup group) {
     for (auto& pTask : m_activeTaskList) {
         if (pTask->m_group == group) {
             return pTask;
@@ -494,7 +492,7 @@ inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
 inline void Core::startTask(QSharedPointer<Core::Task> pTask) {
     m_activeTaskList.append(pTask);
     pTask->m_state = ACTIVE;
-    TaskHelper* pTaskHelper = new TaskHelper(pTask->m_functionBound, this); // Add parent
+    TaskHelper* pTaskHelper = new TaskHelper(pTask->m_functionBound, this); // Add with parent!
 
     connect(pTaskHelper, &TaskHelper::finished, this, [this, pTask, pTaskHelper](QVariant result) {
         pTask->m_state = FINISHED;
@@ -530,7 +528,7 @@ inline void Core::startQueuedTask() {
 }
 
 template <typename... Args>
-void Core::insertToTaskHash(int taskType, std::function<QVariant(Args...)> taskFunction, int taskGroup, int taskStopTimeout) {
+void Core::insertToTaskHash(TaskType taskType, std::function<QVariant(Args...)> taskFunction, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     if (m_taskHash.contains(taskType)) {
         qWarning() << "Core::registerTask - Task type is already registered:" << taskType;
         throw std::logic_error("Task type is already registered");
@@ -540,9 +538,9 @@ void Core::insertToTaskHash(int taskType, std::function<QVariant(Args...)> taskF
 
 // --- Task implementation (inline) ---
 
-inline Core::Task::Task(std::function<QVariant()> functionBound, int type, int group, QVariantList argsList)
+inline Core::Task::Task(std::function<QVariant()> functionBound, TaskType type, TaskGroup group, QVariantList argsList)
     : m_functionBound(functionBound), m_type(type), m_group(group), m_argsList(argsList) {
-    static long id = 0;
+    static TaskId id = 0;
     m_id = id++;
     m_stopFlag.store(false);
     m_state = INACTIVE;
