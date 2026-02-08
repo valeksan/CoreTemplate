@@ -240,28 +240,28 @@ void Core::registerTask(TaskType taskType, std::function<R(Args...)> taskFunctio
         throw std::logic_error("Not convertible return type");
     }
 
-    insertToTaskHash(taskType, f, taskGroup, taskStopTimeout);
+    insertToTaskHash(taskType, std::move(f), taskGroup, taskStopTimeout);
 }
 
 template <typename R, typename... Args>
 void Core::registerTask(TaskType taskType, R (*taskFunction)(Args...), TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
-    registerTask(taskType, std::function<R(Args...)>(taskFunction), taskGroup, taskStopTimeout);
+    // Use deduction guide for std::function
+    registerTask(taskType, std::function(taskFunction), taskGroup, taskStopTimeout);
 }
 
 template <typename Class, typename R, typename... Args>
 void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...), Class* taskObj, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     // Direct call to bind_placeholders and registerTask with explicit std::function signature
     auto boundFunc = bind_placeholders(taskMethod, taskObj, std::make_index_sequence<sizeof...(Args)>());
-    // Explicitly specify std::function type for the result of std::bind
-    std::function<R(Args...)> func = boundFunc;
-    registerTask(taskType, func, taskGroup, taskStopTimeout);
+    // Use deduction guide for std::function
+    registerTask(taskType, static_cast<std::function<R(Args...)>>(boundFunc), taskGroup, taskStopTimeout);
 }
 
 template <typename Class, typename R, typename... Args>
 void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
     auto boundFunc = bind_placeholders(taskMethod, taskObj, std::make_index_sequence<sizeof...(Args)>());
-    std::function<R(Args...)> func = boundFunc;
-    registerTask(taskType, func, taskGroup, taskStopTimeout);
+    // Use deduction guide for std::function
+    registerTask(taskType, static_cast<std::function<R(Args...)>>(boundFunc), taskGroup, taskStopTimeout);
 }
 
 // Generic overload (works for lambdas, functors)
