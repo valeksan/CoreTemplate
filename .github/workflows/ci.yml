@@ -14,34 +14,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Qt 6.10.2 (win64_mingw)
+      # Устанавливаем Qt с архитектурой под MSVC
+      - name: Install Qt 6.10.2 (win64_msvc2019_64)
         uses: jurplel/install-qt-action@v3
         with:
           version: '6.10.2'
           host: windows
           target: desktop
-          arch: win64_mingw
+          arch: win64_msvc2019_64 # <-- Вот это важно!
+
+      # Устанавливаем Visual Studio Build Tools (или MSVC toolchain)
+      - name: Setup MSVC
+        uses: microsoft/setup-msbuild@v2
+        # Этот action устанавливает MSBuild и компиляторы MSVC
 
       - name: Build example
         shell: pwsh
         run: |
-          # Устанавливаем PATH так, чтобы папка с компилятором из Qt была первой
-          # $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH" # Это может не сработать для mingw32-make
-          
-          # Проверим, что компилятор есть
-          Write-Host "Looking for compiler in: $env:QT_BASE_PATH\bin"
-          Get-ChildItem "$env:QT_BASE_PATH\bin" | Where-Object { $_.Name -like "*g++.exe" }
-          
           cd example
           mkdir build
           cd build
-          
-          # Явно указываем компилятор и make программу
-          cmake .. -G "MinGW Makefiles" `
-                   -DCMAKE_BUILD_TYPE=Release `
-                   -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
-                   -DCMAKE_CXX_COMPILER="$env:QT_BASE_PATH\bin\g++.exe" `
-                   -DCMAKE_C_COMPILER="$env:QT_BASE_PATH\bin\gcc.exe" `
-                   -DCMAKE_MAKE_PROGRAM="$env:QT_BASE_PATH\bin\mingw32-make.exe"
-          
-          cmake --build .
+          # Используем генератор Visual Studio
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+          cmake --build . --config Release
