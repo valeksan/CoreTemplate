@@ -312,12 +312,12 @@ void Core::addTask(TaskType taskType, Args... args) {
         }
 
         auto taskFunctionBound = std::bind(taskFunction, args...);
-        auto pTask = QSharedPointer<Task>::create(
+        auto pTask = QSharedPointer<Task>(new Task(
             std::move(taskFunctionBound),
             taskType,
             m_taskHash[taskType].m_group,
             std::move(argsList)
-            );
+        ));
 
         bool start = std::none_of(m_activeTaskList.begin(), m_activeTaskList.end(), [group = pTask->m_group](const auto& pActiveTask) {
             return pActiveTask->m_group == group;
@@ -570,3 +570,4 @@ void Core::insertToTaskHash(TaskType taskType, std::function<QVariant(Args...)> 
 }
 
 #endif // CORE_H
+
