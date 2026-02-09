@@ -1,39 +1,34 @@
+# .github/workflows/ci.yml
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
 
 jobs:
   build:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        qt_version: ["6.8.0"]
-        qt_host: ["windows"]
-        qt_target: ["desktop"]
-        qt_arch: ["win64_mingw"]
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Qt
+      - name: Install Qt 6.10.2 (win64_mingw)
         uses: jurplel/install-qt-action@v3
         with:
-          version: ${{ matrix.qt_version }}
-          host: ${{ matrix.qt_host }}
-          target: ${{ matrix.qt_target }}
-          arch: ${{ matrix.qt_arch }}
-          dir: ${{ github.workspace }}/qt
+          version: '6.10.2'
+          host: windows
+          target: desktop
+          arch: win64_mingw
 
-      - name: Configure CMake
-        run: >
-          cmake ${{ github.workspace }}/example
-          -G "MinGW Makefiles"
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+      - name: Build example
         shell: pwsh
-
-      - name: Build
-        run: cmake --build . --parallel
-        shell: pwsh
-        working-directory: ${{ github.workspace }}/example/build
+        run: |
+          cd example
+          mkdir build
+          cd build
+          # Используем MinGW Makefiles, а не Ninja
+          # Указываем CMAKE_PREFIX_PATH, чтобы CMake нашёл Qt
+          cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+          cmake --build .
