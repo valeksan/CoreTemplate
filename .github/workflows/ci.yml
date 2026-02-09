@@ -104,21 +104,24 @@ jobs:
         $qtBin = "$env:QT_BASE_PATH\bin"
         Write-Host "Using Qt binaries from: $qtBin"
 
-        # Check if g++.exe exists
-        if (-Not (Test-Path "$qtBin\g++.exe")) {
-            Write-Error "g++.exe not found in $qtBin"
+        # Check for the correct MinGW compiler name
+        $gppPath = "$qtBin\x86_64-w64-mingw32-g++.exe"
+        if (-Not (Test-Path "$gppPath")) {
+            Write-Error "Compiler not found at: $gppPath"
+            Write-Host "Available files in $qtBin:"
+            Get-ChildItem "$qtBin" | Where-Object { $_.Name -like "*g++*" } | Select-Object Name
             exit 1
         }
 
         # Set environment variables
-        $env:CXX = "$qtBin\g++.exe"
-        $env:CC = "$qtBin\gcc.exe"
+        $env:CXX = "$gppPath"
+        $env:CC = "$qtBin\x86_64-w64-mingw32-gcc.exe"
         $env:PATH = "$qtBin;$env:PATH"
 
         # Run CMake
         cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release `
-                 -DCMAKE_C_COMPILER="$qtBin\gcc.exe" `
-                 -DCMAKE_CXX_COMPILER="$qtBin\g++.exe" `
+                 -DCMAKE_C_COMPILER="$env:CC" `
+                 -DCMAKE_CXX_COMPILER="$env:CXX" `
                  -DCMAKE_MAKE_PROGRAM=ninja
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
