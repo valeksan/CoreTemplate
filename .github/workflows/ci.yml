@@ -1,24 +1,31 @@
 # .github/workflows/ci.yml
 name: CI
 
+# Trigger only when core.h is modified
 on:
   push:
-    branches: [main, master]
+    paths:
+      - 'core.h'              # Relative path to the file in the repository root
+      - '.github/workflows/ci.yml'  # Also trigger if the workflow file itself is changed
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [main, master]
+    paths:
+      - 'core.h'
+      - '.github/workflows/ci.yml'
+    branches: [ "main", "master" ]
 
 jobs:
   build:
-    # Запускаем на Linux и macOS
+    # Run on Linux and macOS
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        # Определяем архитектуру Qt для каждой ОС
+        # Define Qt architecture for each OS
         include:
           - os: ubuntu-latest
-            qt_arch: 'linux_gcc_64'        # Для Linux
+            qt_arch: 'linux_gcc_64'        # For Linux
           - os: macos-latest
-            qt_arch: 'clang_64'            # Для macOS
+            qt_arch: 'clang_64'            # For macOS
 
     runs-on: ${{ matrix.os }}
 
@@ -36,7 +43,7 @@ jobs:
         modules: ''
         tools: ''
 
-    # Установка CMake и Ninja
+    # Install CMake and Ninja
     - name: Install CMake and Ninja (Ubuntu)
       if: runner.os == 'Linux'
       run: |
@@ -48,7 +55,7 @@ jobs:
       run: |
         brew install cmake ninja
 
-    # Сборка примера
+    # Build the example
     - name: Build Example App
       run: |
         cd example
