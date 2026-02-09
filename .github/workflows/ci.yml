@@ -1,0 +1,58 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    # Запускаем на Linux и macOS
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        # Определяем архитектуру Qt для каждой ОС
+        include:
+          - os: ubuntu-latest
+            qt_arch: 'linux_gcc_64'        # Для Linux
+          - os: macos-latest
+            qt_arch: 'clang_64'            # Для macOS
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.10.2'
+        host: ${{ matrix.os == 'ubuntu-latest' && 'linux' || 'mac' }}
+        target: 'desktop'
+        arch: ${{ matrix.qt_arch }}
+        modules: ''
+        tools: ''
+
+    # Установка CMake и Ninja
+    - name: Install CMake and Ninja (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+
+    - name: Install CMake and Ninja (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ninja
+
+    # Сборка примера
+    - name: Build Example App
+      run: |
+        cd example
+        mkdir build
+        cd build
+        cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        cmake --build .
