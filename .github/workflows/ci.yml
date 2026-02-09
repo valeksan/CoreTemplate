@@ -33,17 +33,11 @@ jobs:
           Get-ChildItem "$env:QT_BASE_PATH\bin" -ErrorAction SilentlyContinue
 
       - name: Build example
-        shell: pwsh
+        shell: cmd
         run: |
           cd example
           mkdir build
           cd build
-          # Устанавливаем переменные окружения
-          $env:CXX = "$env:QT_BASE_PATH\bin\g++.exe"
-          $env:CC = "$env:QT_BASE_PATH\bin\gcc.exe"
-          $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
-          # Проверяем компилятор
-          & "$env:CXX" --version
-          # Собираем
+          set PATH=%QT_BASE_PATH%\bin;%PATH%
           cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
           cmake --build .
