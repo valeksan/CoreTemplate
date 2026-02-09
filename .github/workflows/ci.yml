@@ -25,11 +25,23 @@ jobs:
       - name: Build example
         shell: pwsh
         run: |
+          # Устанавливаем PATH так, чтобы папка с компилятором из Qt была первой
+          # $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH" # Это может не сработать для mingw32-make
+          
+          # Проверим, что компилятор есть
+          Write-Host "Looking for compiler in: $env:QT_BASE_PATH\bin"
+          Get-ChildItem "$env:QT_BASE_PATH\bin" | Where-Object { $_.Name -like "*g++.exe" }
+          
           cd example
           mkdir build
           cd build
-          # Явно указываем компилятор через флаг -D
-          # и устанавливаем PATH, чтобы он был найден
-          $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
-          cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" -DCMAKE_CXX_COMPILER=g++
+          
+          # Явно указываем компилятор и make программу
+          cmake .. -G "MinGW Makefiles" `
+                   -DCMAKE_BUILD_TYPE=Release `
+                   -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+                   -DCMAKE_CXX_COMPILER="$env:QT_BASE_PATH\bin\g++.exe" `
+                   -DCMAKE_C_COMPILER="$env:QT_BASE_PATH\bin\gcc.exe" `
+                   -DCMAKE_MAKE_PROGRAM="$env:QT_BASE_PATH\bin\mingw32-make.exe"
+          
           cmake --build .
