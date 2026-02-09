@@ -22,22 +22,14 @@ jobs:
           target: desktop
           arch: win64_mingw
 
-      - name: Debug. Print paths
-        shell: pwsh
-        run: |
-          Write-Host "QT_BASE_PATH = $env:QT_BASE_PATH"
-          Write-Host "QT_ROOT_DIR = $env:QT_ROOT_DIR"
-          Write-Host "Listing QT_BASE_PATH:"
-          Get-ChildItem "$env:QT_BASE_PATH"
-          Write-Host "Listing QT_BASE_PATH\bin:"
-          Get-ChildItem "$env:QT_BASE_PATH\bin" -ErrorAction SilentlyContinue
-
       - name: Build example
-        shell: cmd
+        shell: pwsh
         run: |
           cd example
           mkdir build
           cd build
-          set PATH=%QT_BASE_PATH%\bin;%PATH%
-          cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+          # Добавляем путь к MinGW в PATH
+          $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
+          # Запускаем CMake, явно указывая компилятор через флаг (а не через env)
+          cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
           cmake --build .
