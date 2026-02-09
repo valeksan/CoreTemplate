@@ -100,28 +100,34 @@ jobs:
         mkdir build
         cd build
 
-        # The Qt installation path is already in QT_BASE_PATH
+        # Get the Qt bin path
         $qtBin = "$env:QT_BASE_PATH\bin"
         Write-Host "Using Qt binaries from: $qtBin"
 
-        # Check for the correct MinGW compiler name
-        $gppPath = "$qtBin\x86_64-w64-mingw32-g++.exe"
-        if (-Not (Test-Path "$gppPath")) {
-            Write-Error "Compiler not found at: $gppPath"
-            Write-Host "Available files in $qtBin:"
+        # Find the correct compiler name (it's usually x86_64-w64-mingw32-g++.exe)
+        $gppFile = Get-ChildItem "$qtBin" | Where-Object { $_.Name -like "x86_64-w64-mingw32-g++.exe" } | Select-Object -First 1
+        if (-Not $gppFile) {
+            Write-Error "Compiler x86_64-w64-mingw32-g++.exe not found in $qtBin"
+            Write-Host "Available files:"
             Get-ChildItem "$qtBin" | Where-Object { $_.Name -like "*g++*" } | Select-Object Name
             exit 1
         }
 
-        # Set environment variables
-        $env:CXX = "$gppPath"
-        $env:CC = "$qtBin\x86_64-w64-mingw32-gcc.exe"
+        $gppPath = $gppFile.FullName
+        $gccPath = $gppPath.Replace("g++.exe", "gcc.exe")
+
+        Write-Host "Found C++ compiler: $gppPath"
+        Write-Host "Found C compiler: $gccPath"
+
+        # Set environment variables (correct syntax)
+        $env:CXX = $gppPath
+        $env:CC = $gccPath
         $env:PATH = "$qtBin;$env:PATH"
 
         # Run CMake
         cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release `
-                 -DCMAKE_C_COMPILER="$env:CC" `
-                 -DCMAKE_CXX_COMPILER="$env:CXX" `
+                 -DCMAKE_C_COMPILER="$gccPath" `
+                 -DCMAKE_CXX_COMPILER="$gppPath" `
                  -DCMAKE_MAKE_PROGRAM=ninja
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
