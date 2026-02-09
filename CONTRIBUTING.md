@@ -1,6 +1,6 @@
-# Contributing to CoreTaskManager
+# Contributing to CoreTemplate
 
-Thank you for your interest in contributing to CoreTaskManager! 🙏  
+Thank you for your interest in contributing to CoreTemplate! 🙏  
 We strive to make the contribution process as smooth and transparent as possible.
 
 ## How to Contribute
