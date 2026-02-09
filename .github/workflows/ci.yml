@@ -28,6 +28,8 @@ jobs:
           cd example
           mkdir build
           cd build
-          # Используем --fresh, чтобы игнорировать кэш
-          cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" --fresh
+          # Явно указываем компилятор через флаг -D
+          # и устанавливаем PATH, чтобы он был найден
+          $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
+          cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" -DCMAKE_CXX_COMPILER=g++
           cmake --build .
