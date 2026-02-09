@@ -66,15 +66,16 @@ jobs:
         choco install ninja
 
     # NEW: Debug step - list the Qt directory structure to find the real MinGW folder name
-    - name: Debug / List Qt directories (Windows)
+    - name: Debug / Find Qt install path (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Write-Host "Contents of $env:GITHUB_WORKSPACE\Qt\6.10.2:"
-        Get-ChildItem "$env:GITHUB_WORKSPACE\Qt\6.10.2"
-        Write-Host "Checking for MinGW folders..."
-        $qtBase = "$env:GITHUB_WORKSPACE\Qt\6.10.2"
-        $folders = Get-ChildItem $qtBase | Where-Object { $_.Name -like "*mingw*" }
+        Write-Host "QT_BASE_PATH = $env:QT_BASE_PATH"
+        Write-Host "QT_ROOT_DIR = $env:QT_ROOT_DIR"
+        Write-Host "Checking contents of QT_BASE_PATH:"
+        Get-ChildItem "$env:QT_BASE_PATH"
+        Write-Host "Checking for MinGW folders in QT_BASE_PATH:"
+        $folders = Get-ChildItem "$env:QT_BASE_PATH" | Where-Object { $_.Name -like "*mingw*" }
         foreach ($folder in $folders) {
             Write-Host "Found MinGW folder: $($folder.Name)"
             Write-Host "Contents of $($folder.FullName)\bin:"
@@ -99,8 +100,8 @@ jobs:
         mkdir build
         cd build
 
-        # Find the correct MinGW folder
-        $qtBase = "$env:GITHUB_WORKSPACE\Qt\6.10.2"
+        # Use the path provided by install-qt-action
+        $qtBase = "$env:QT_BASE_PATH"
         $mingwFolder = Get-ChildItem $qtBase | Where-Object { $_.Name -like "*mingw*" } | Select-Object -First 1
         if (-Not $mingwFolder) {
             Write-Error "No MinGW folder found in $qtBase"
@@ -112,8 +113,7 @@ jobs:
 
         # Check for g++.exe
         if (-Not (Test-Path "$mingwBin\g++.exe")) {
-            Write-Error "g++.exe not found in $mingwBin. Available files:"
-            Get-ChildItem "$mingwBin" | Where-Object { $_.Name -like "*.exe" } | Select-Object Name
+            Write-Error "g++.exe not found in $mingwBin"
             exit 1
         }
 
