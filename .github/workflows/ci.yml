@@ -17,7 +17,7 @@ jobs:
         # Defining the Qt architecture for each OS
         include:
           - os: ubuntu-latest
-            qt_arch: 'gcc_64'        # For Linux
+            qt_arch: 'linux_gcc_64'        # For Linux
           - os: windows-latest
             qt_arch: 'win64_mingw'   # For Windows (suitable for MinGW/LLVM-MinGW)
           - os: macos-latest
