@@ -22,20 +22,19 @@ jobs:
           target: desktop
           arch: win64_mingw
 
-      - name: Clean build directory
-        shell: pwsh
-        run: |
-          Remove-Item -Path "example/build" -Recurse -Force -ErrorAction Ignore
-
       - name: Build example
         shell: pwsh
         run: |
           cd example
+          # Устанавливаем переменные окружения ПЕРЕД cmake
+          $env:CMAKE_CXX_COMPILER = "$env:QT_BASE_PATH\bin\g++.exe"
+          $env:CMAKE_C_COMPILER = "$env:QT_BASE_PATH\bin\gcc.exe"
+          $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
+          
+          # Создаём чистую build папку
           mkdir build
           cd build
-          # Устанавливаем PATH, чтобы g++ был первым в списке
-          $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
-          # Запускаем cmake с указанием пути к Qt и генератора
-          # Убедимся, что CMAKE_C_COMPILER не кэшируется
-          cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_FIND_ROOT_PATH="$env:QT_BASE_PATH"
+          
+          # Запускаем cmake без указания компилятора, он возьмёт из env
+          cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
           cmake --build .
