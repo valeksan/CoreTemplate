@@ -65,51 +65,20 @@ jobs:
         choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'
         choco install ninja
 
-    # Setup PATH for Qt and MinGW on Windows to ensure compilers are found
-    - name: Setup PATH for Qt and MinGW (Windows)
+    # NEW: Debug step - list the Qt directory structure to find the real MinGW folder name
+    - name: Debug: List Qt directories (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        # Find the Qt installation directory (usually under GITHUB_WORKSPACE\Qt\6.10.2\mingw_64 or similar)
-        # The exact path depends on how install-qt-action sets it up
-        $qtBasePath = "$env:GITHUB_WORKSPACE\Qt\6.10.2"
-        $qtArchPath = "mingw_64" # This corresponds to win64_mingw
-        $qtInstallPath = Join-Path $qtBasePath $qtArchPath
-        Write-Host "Qt Install Path: $qtInstallPath"
-
-        # Add the bin directories to PATH
-        $binPaths = @("$qtInstallPath\bin", "$qtInstallPath\libexec")
-        foreach ($path in $binPaths) {
-            if (Test-Path $path) {
-                $env:PATH = "$path;$env:PATH"
-                Write-Host "Added to PATH: $path"
-            } else {
-                Write-Host "Warning: Path does not exist: $path"
-            }
-        }
-        # Verify the compiler is accessible
-        try {
-            $gppVersion = & g++ --version
-            Write-Host "g++ found: $($gppVersion[0])"
-        } catch {
-            Write-Host "Error: g++ not found in PATH."
-            Write-Host "Current PATH: $env:PATH"
-            exit 1
-        }
-        # Verify CMake and Ninja
-        try {
-            $cmakeVersion = & cmake --version
-            Write-Host "cmake found: $($cmakeVersion[0])"
-        } catch {
-            Write-Host "Error: cmake not found in PATH."
-            exit 1
-        }
-        try {
-            $ninjaVersion = & ninja --version
-            Write-Host "ninja found: $($ninjaVersion)"
-        } catch {
-            Write-Host "Error: ninja not found in PATH."
-            exit 1
+        Write-Host "Contents of $env:GITHUB_WORKSPACE\Qt\6.10.2:"
+        Get-ChildItem "$env:GITHUB_WORKSPACE\Qt\6.10.2"
+        Write-Host "Checking for MinGW folders..."
+        $qtBase = "$env:GITHUB_WORKSPACE\Qt\6.10.2"
+        $folders = Get-ChildItem $qtBase | Where-Object { $_.Name -like "*mingw*" }
+        foreach ($folder in $folders) {
+            Write-Host "Found MinGW folder: $($folder.Name)"
+            Write-Host "Contents of $($folder.FullName)\bin:"
+            Get-ChildItem "$($folder.FullName)\bin" | Where-Object { $_.Name -like "*g++.exe" } | Select-Object Name
         }
 
     # 4. Build example
@@ -130,37 +99,41 @@ jobs:
         mkdir build
         cd build
 
-        # Getting the path to the installed MinGW inside Qt
-        $qtPath = "$env:GITHUB_WORKSPACE\Qt\6.10.2\mingw_64"
-        $mingwBin = "$qtPath\bin"
+        # Find the correct MinGW folder
+        $qtBase = "$env:GITHUB_WORKSPACE\Qt\6.10.2"
+        $mingwFolder = Get-ChildItem $qtBase | Where-Object { $_.Name -like "*mingw*" } | Select-Object -First 1
+        if (-Not $mingwFolder) {
+            Write-Error "No MinGW folder found in $qtBase"
+            exit 1
+        }
+        $mingwBin = "$($mingwFolder.FullName)\bin"
 
-        # Check that g++ exists
+        Write-Host "Using MinGW from: $mingwBin"
+
+        # Check for g++.exe
         if (-Not (Test-Path "$mingwBin\g++.exe")) {
-            Write-Error "g++.exe not found in $mingwBin"
+            Write-Error "g++.exe not found in $mingwBin. Available files:"
+            Get-ChildItem "$mingwBin" | Where-Object { $_.Name -like "*.exe" } | Select-Object Name
             exit 1
         }
 
-        # Explicitly setting environment variables for CMake
+        # Set environment variables
         $env:CXX = "$mingwBin\g++.exe"
         $env:CC = "$mingwBin\gcc.exe"
-        $env:PATH = "$mingwBin;$qtPath\libexec;$env:PATH"
+        $env:PATH = "$mingwBin;$env:PATH"
 
-        # Running CMake with explicit indication of the generator and compiler
+        # Run CMake
         cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release `
                  -DCMAKE_C_COMPILER="$mingwBin\gcc.exe" `
                  -DCMAKE_CXX_COMPILER="$mingwBin\g++.exe" `
                  -DCMAKE_MAKE_PROGRAM=ninja
 
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "CMake configuration failed."
-            exit $LASTEXITCODE
-        }
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         cmake --build .
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Build failed."
-            exit $LASTEXITCODE
-        }
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        
+        Write-Host "Build successful!"
 
     # (Optional) Running the example (only if it is headless)
     # - name: Run Example App (Linux/macOS)
