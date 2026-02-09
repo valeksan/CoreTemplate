@@ -9,6 +9,7 @@ add_executable(ExampleApp
     main.cpp
     mainwindow.cpp
     mainwindow.ui
+    mainwindow.h
     ../core.h
 )
 
