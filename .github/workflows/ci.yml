@@ -112,7 +112,6 @@ jobs:
             exit 1
         }
 
-
     # 4. Build example
     - name: Build Example App (Linux/macOS)
       if: runner.os != 'Windows'
@@ -130,16 +129,36 @@ jobs:
         cd example
         mkdir build
         cd build
-        # Ensure the correct generator is used and the compiler is found
-        # We rely on the PATH setup above to provide g++
-        cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=ninja
+
+        # Getting the path to the installed MinGW inside Qt
+        $qtPath = "$env:GITHUB_WORKSPACE\Qt\6.10.2\mingw_64"
+        $mingwBin = "$qtPath\bin"
+
+        # Check that g++ exists
+        if (-Not (Test-Path "$mingwBin\g++.exe")) {
+            Write-Error "g++.exe not found in $mingwBin"
+            exit 1
+        }
+
+        # Explicitly setting environment variables for CMake
+        $env:CXX = "$mingwBin\g++.exe"
+        $env:CC = "$mingwBin\gcc.exe"
+        $env:PATH = "$mingwBin;$qtPath\libexec;$env:PATH"
+
+        # Running CMake with explicit indication of the generator and compiler
+        cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release `
+                 -DCMAKE_C_COMPILER="$mingwBin\gcc.exe" `
+                 -DCMAKE_CXX_COMPILER="$mingwBin\g++.exe" `
+                 -DCMAKE_MAKE_PROGRAM=ninja
+
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "CMake configuration failed."
+            Write-Error "CMake configuration failed."
             exit $LASTEXITCODE
         }
+
         cmake --build .
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "Build failed."
+            Write-Error "Build failed."
             exit $LASTEXITCODE
         }
 
