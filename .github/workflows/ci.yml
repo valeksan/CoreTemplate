@@ -8,25 +8,42 @@ on:
     branches: [main, master]
 
 jobs:
-  debug:
+  build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Qt
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6.10.2 (win64_mingw)
         uses: jurplel/install-qt-action@v3
         with:
           version: '6.10.2'
           host: windows
           target: desktop
           arch: win64_mingw
-      - name: Find g++.exe
+
+      - name: Debug. Print paths
         shell: pwsh
         run: |
-          Write-Host "=== QT_BASE_PATH ==="
-          Write-Host $env:QT_BASE_PATH
-          Write-Host "=== Contents of QT_BASE_PATH ==="
-          Get-ChildItem $env:QT_BASE_PATH
-          Write-Host "=== Contents of QT_BASE_PATH\bin ==="
-          Get-ChildItem "$env:QT_BASE_PATH\bin" | Where-Object { $_.Name -like "*g++*" } | Select-Object Name, FullName
-          Write-Host "=== Try to run g++ ==="
-          & "$env:QT_BASE_PATH\bin\g++.exe" --version
+          Write-Host "QT_BASE_PATH = $env:QT_BASE_PATH"
+          Write-Host "QT_ROOT_DIR = $env:QT_ROOT_DIR"
+          Write-Host "Listing QT_BASE_PATH:"
+          Get-ChildItem "$env:QT_BASE_PATH"
+          Write-Host "Listing QT_BASE_PATH\bin:"
+          Get-ChildItem "$env:QT_BASE_PATH\bin" -ErrorAction SilentlyContinue
+
+      - name: Build example
+        shell: pwsh
+        run: |
+          cd example
+          mkdir build
+          cd build
+          # Устанавливаем переменные окружения
+          $env:CXX = "$env:QT_BASE_PATH\bin\g++.exe"
+          $env:CC = "$env:QT_BASE_PATH\bin\gcc.exe"
+          $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
+          # Проверяем компилятор
+          & "$env:CXX" --version
+          # Собираем
+          cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+          cmake --build .
