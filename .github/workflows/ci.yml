@@ -1,40 +1,39 @@
-# .github/workflows/ci.yml
 name: CI
 
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    strategy:
+      fail-fast: false
+      matrix:
+        qt_version: ["6.8.0"]
+        qt_host: ["windows"]
+        qt_target: ["desktop"]
+        qt_arch: ["win64_mingw"]
 
-      - name: Install Qt 6.10.2 (win64_mingw)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
-          version: '6.10.2'
-          host: windows
-          target: desktop
-          arch: win64_mingw
+          version: ${{ matrix.qt_version }}
+          host: ${{ matrix.qt_host }}
+          target: ${{ matrix.qt_target }}
+          arch: ${{ matrix.qt_arch }}
+          dir: ${{ github.workspace }}/qt
 
-      - name: Build example
+      - name: Configure CMake
+        run: >
+          cmake ${{ github.workspace }}/example
+          -G "MinGW Makefiles"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
         shell: pwsh
-        run: |
-          cd example
-          # Устанавливаем переменные окружения ПЕРЕД cmake
-          $env:CMAKE_CXX_COMPILER = "$env:QT_BASE_PATH\bin\g++.exe"
-          $env:CMAKE_C_COMPILER = "$env:QT_BASE_PATH\bin\gcc.exe"
-          $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
-          
-          # Создаём чистую build папку
-          mkdir build
-          cd build
-          
-          # Запускаем cmake без указания компилятора, он возьмёт из env
-          cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
-          cmake --build .
+
+      - name: Build
+        run: cmake --build . --parallel
+        shell: pwsh
+        working-directory: ${{ github.workspace }}/example/build
