@@ -1,79 +1,111 @@
-# CoreTaskManager
+# 🚀 CoreTaskManager
 
-A Qt-based library for managing and executing tasks in separate threads.
+A modern, header-only C++/Qt library for **safe and efficient task execution in separate threads**, with built-in support for grouping, cooperative stopping, and type-safe registration.
+
+ 💡 Think of it as a lightweight, flexible alternative to `QThreadPool` + `QFuture`, but with more control and cleaner C++20-style API.
+
+## ✨ Why CoreTaskManager?
+
+- ✅ **Zero overhead**: Header-only, no extra dependencies.
+- ✅ **Type-safe**: Compile-time checks for function signatures (thanks to `std::function`, `if constexpr`, `std::any`).
+- ✅ **Grouping**: Run only one task per group (e.g., "network", "file I/O").
+- ✅ **Cooperative cancellation**: Tasks can check `stopTaskFlag()` and exit gracefully.
+- ✅ **Modern C++**: Uses `std::atomic`, `std::bind`, `enum class`, `QMetaType`, `QSharedPointer`.
+
+## 🚀 Quick Start
+
+```cpp
+// 1. Init task manager
+auto m_pCore = new Core();
+
+// 2. Register a task
+m_pCore->registerTask(TASK_CALCULATE, [](int a, int b) -> int {
+    QThread::msleep(100); // Simulate work
+    return a + b;
+});
+
+// 3. Add it to the queue
+m_pCore->addTask(TASK_CALCULATE, 10, 20);
+
+// 4. Handle result
+connect(m_pCore, &Core::finishedTask, this, [](TaskId id, TaskType type, const QVariant& result) {
+    qDebug() << "Result:" << result.toInt();
+});
+```
+
+## 📦 Installation
+
+Just copy core.h into your project. It's header-only!
+
+## 🧪 Example
+
+See **example/** directory for a full Qt Widgets app demonstrating all features.
+
+*For Qt6, it is preferable to use **CMakeLists.txt** when opening a project, and if Qt5 then **example_app.pro**.*
+
+![example app screenshot](example/example_app_screenshot.jpg)
 
 ## Features
 
-* Executes registered functions/lambdas/functors in dedicated threads.
-* Supports task grouping (only one task per group runs at a time).
-* Provides mechanisms for stopping and terminating tasks.
-* Allows querying task status (registered, idle, added by type/group).
+- Executes registered functions/lambdas/functors in dedicated threads.
+- Supports task grouping (only one task per group runs at a time).
+- Provides mechanisms for stopping and terminating tasks.
+- Allows querying task status (registered, idle, added by type/group).
 
 ## Architecture and Usage Rules
 
 **IMPORTANT:** The `Core` class is **not thread-safe** for its public interface methods. To ensure stability:
 
-*   **All calls to public methods** (e.g., `registerTask`, `addTask`, `stopTaskById`, `terminateTaskById`, `isTask...`, etc.) **must originate from the same thread** where the `Core` object lives. Typically, this is the **main GUI thread**.
-*   Functions registered via `registerTask` are executed in their own dedicated threads managed by the library.
-*   Code running inside a registered task function **should avoid calling public `Core` methods directly**, as this can lead to race conditions and undefined behavior. If a task needs to interact with the `Core`, it should use `QMetaObject::invokeMethod` to send a message to the main thread, which then performs the action safely.
+- **All calls to public methods** (e.g., `registerTask`, `addTask`, `stopTaskById`, `terminateTaskById`, `isTask...`, etc.) **must originate from the same thread** where the `Core` object lives. Typically, this is the **main GUI thread**.
+- Functions registered via `registerTask` are executed in their own dedicated threads managed by the library.
+- Code running inside a registered task function **should avoid calling public `Core` methods directly**, as this can lead to race conditions and undefined behavior. If a task needs to interact with the `Core`, it should use `QMetaObject::invokeMethod` to send a message to the main thread, which then performs the action safely.
 
 ## Public API
 
-* `registerTask`: Registers a function/lambda/functor for later execution by type.
-* `addTask`: Adds a registered task to the execution queue.
-* `unregisterTask`: Removes a task type from registration.
-* `stopTaskById`, `stopTaskByType`, `stopTaskByGroup`, `stopTasks`: Request graceful stop of tasks.
-* `terminateTaskById`: Forcefully terminates a task by ID.
-* `isTaskRegistered`, `isIdle`, `isTaskAddedByType`, `isTaskAddedByGroup`: Query task status.
-* `groupByTask`: Get the group associated with a task type.
-* `stopTaskFlag`: Get a flag for the current thread to allow cooperative stopping within a task function.
+- `registerTask`: Registers a function/lambda/functor for later execution by type.
+- `addTask`: Adds a registered task to the execution queue.
+- `unregisterTask`: Removes a task type from registration.
+- `stopTaskById`, `stopTaskByType`, `stopTaskByGroup`, `stopTasks`: Request graceful stop of tasks.
+- `terminateTaskById`: Forcefully terminates a task by ID.
+- `isTaskRegistered`, `isIdle`, `isTaskAddedByType`, `isTaskAddedByGroup`: Query task status.
+- `groupByTask`: Get the group associated with a task type.
+- `stopTaskFlag`: Get a flag for the current thread to allow cooperative stopping within a task function.
 
 ## Threading Model
 
-1.  Main Thread: Hosts the `Core` object. All public API calls should come from here.
-2.  Task Threads: Created internally by the library for each task execution. Registered functions run here.
-3.  Communication: Interaction between Task Threads and Main Thread happens via Qt's signal/slot mechanism (e.g., `TaskHelper::finished`) or `QTimer` events scheduled on the main thread (e.g., in `stopTask`).
+1. Main Thread: Hosts the `Core` object. All public API calls should come from here.
+2. Task Threads: Created internally by the library for each task execution. Registered functions run here.
+3. Communication: Interaction between Task Threads and Main Thread happens via Qt's signal/slot mechanism (e.g., `TaskHelper::finished`) or `QTimer` events scheduled on the main thread (e.g., in `stopTask`).
 
 ## Safety Considerations
 
-*   Adhering to the single-threaded access rule for the public API is crucial.
-*   Be cautious with `QTimer::singleShot` and `connect` callbacks if they access shared data outside of `Core`'s internal structures, especially if those accesses are not synchronized or atomic.
-*   The `Core` class uses Qt types (`QList`, `QHash`, `QSharedPointer`) which manage their own lifetimes. However, the concurrent access to these types from different threads is avoided by the usage rules.
+- Adhering to the single-threaded access rule for the public API is crucial.
+- Be cautious with `QTimer::singleShot` and `connect` callbacks if they access shared data outside of `Core`'s internal structures, especially if those accesses are not synchronized or atomic.
+- The `Core` class uses Qt types (`QList`, `QHash`, `QSharedPointer`) which manage their own lifetimes. However, the concurrent access to these types from different threads is avoided by the usage rules.
 
 ## How It Works
 
-1.  An instance of the `Core` class is created.
-2.  Callables are registered with `Core::registerTask(...)`, assigning them a unique `taskType` integer and optional group and timeout settings.
-3.  Tasks are queued for execution using `Core::addTask(taskType, ...args)`.
-4.  The `Core` manages a queue and ensures only one task per group runs at a time.
-5.  When a slot opens up (either due to a previous task finishing or because the task belongs to a different group), the `Core` starts the next eligible task in its own thread using `CreateThread` (Windows) or `pthread_create` (Unix-like systems).
-6.  The task's associated function executes within the new thread.
-7.  While executing, a task can check a shared stop flag retrieved via `Core::stopTaskFlag()` to perform graceful shutdowns.
-8.  Upon completion (normal, stopped, or terminated), the task emits a signal (`finishedTask`, `terminatedTask`) back to the main thread where the `Core` lives.
-9.  The `Core` updates its internal lists of active and queued tasks and proceeds to start the next queued task if applicable.
-
-## Example Usage
-
-See the `MainWindow` constructor in the provided `mainwindow.cpp` for a comprehensive example demonstrating how to register different types of tasks (functions, member functions, lambdas, functors) and add them for execution.
+1. An instance of the `Core` class is created.
+2. Callables are registered with `Core::registerTask(...)`, assigning them a unique `taskType` integer and optional group and timeout settings.
+3. Tasks are queued for execution using `Core::addTask(taskType, ...args)`.
+4. The `Core` manages a queue and ensures only one task per group runs at a time.
+5. When a slot opens up (either due to a previous task finishing or because the task belongs to a different group), the `Core` starts the next eligible task in its own thread using `CreateThread` (Windows) or `pthread_create` (Unix-like systems).
+6. The task's associated function executes within the new thread.
+7. While executing, a task can check a shared stop flag retrieved via `Core::stopTaskFlag()` to perform graceful shutdowns.
+8. Upon completion (normal, stopped, or terminated), the task emits a signal (`finishedTask`, `terminatedTask`) back to the main thread where the `Core` lives.
+9. The `Core` updates its internal lists of active and queued tasks and proceeds to start the next queued task if applicable.
 
 ## Important Notes
 
-*   **Platform Specifics:** The library uses `CreateThread`/`TerminateThread` on Windows and `pthread_create`/`pthread_cancel` on Unix-like systems for low-level thread management.
-*   **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is intended for use *within* the executing task's thread.
-*   **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
-*   **Requirements:** Requires Qt 6.x (specifically tested against 6.10.2) and C++17 support.
+- **Platform Specifics:** The library uses `CreateThread`/`TerminateThread` on Windows and `pthread_create`/`pthread_cancel` on Unix-like systems for low-level thread management.
+- **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is intended for use *within* the executing task's thread.
+- **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
+- **Requirements:** Requires Qt 6.x (specifically tested against 6.10.2) and C++17 support.
 
 ## Prerequisites
 
-*   Qt6.x (tested with 6.10.2, but theoretically it can also work on Qt5)
-*   C++17 compatible compiler
-
-## Installation
-
-1.  Clone or download this repository.
-2.  Copy the `core.h` file into your Qt project directory (or any preferred location within your source tree).
-3.  Include `core.h` in your source code file where you want to use the `Core` class (e.g., `#include "core.h"`).
-4.  Ensure your project is configured to use C++17 and Qt 6.x.
+- Qt6.x (tested with 6.10.2, but theoretically it can also work on Qt5)
+- C++17 compatible compiler
 
 ## Basic Example
 
