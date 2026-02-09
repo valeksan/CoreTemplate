@@ -2,12 +2,6 @@ cmake_minimum_required(VERSION 3.16)
 
 project(ExampleApp LANGUAGES CXX)
 
-# Let's tell CMake where to look for Qt6
-# install-qt-action sets the QT_ROOT_DIR variable
-if (DEFINED ENV{QT_ROOT_DIR})
-    set(CMAKE_PREFIX_PATH $ENV{QT_ROOT_DIR})
-endif()
-
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
 # Creating an executable file
