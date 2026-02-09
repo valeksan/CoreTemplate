@@ -38,7 +38,7 @@ jobs:
         version: '6.10.2' # target Qt version
         host: ${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'windows-latest' && 'windows' || 'mac' }}
         target: 'desktop'
-        arch: ${{ matrix.qt_arch }} 
+        arch: ${{ matrix.qt_arch }}
         # For Windows: arch: 'win64_msvc2019_64' or 'win64_mingw' (depending on your build)
         # If you are using MinGW on Windows, change the arch below
         modules: '' # Add modules if necessary, for example: 'qtcharts qtnetworkauth'
@@ -57,12 +57,61 @@ jobs:
         brew install cmake ninja
 
     # For Windows, CMake and Ninja may already be installed with Qt, but you can make sure
+    # AND we need to ensure the MinGW path is correctly added to PATH
     - name: Install CMake and Ninja (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
         choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'
         choco install ninja
+
+    # Setup PATH for Qt and MinGW on Windows to ensure compilers are found
+    - name: Setup PATH for Qt and MinGW (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        # Find the Qt installation directory (usually under GITHUB_WORKSPACE\Qt\6.10.2\mingw_64 or similar)
+        # The exact path depends on how install-qt-action sets it up
+        $qtBasePath = "$env:GITHUB_WORKSPACE\Qt\6.10.2"
+        $qtArchPath = "mingw_64" # This corresponds to win64_mingw
+        $qtInstallPath = Join-Path $qtBasePath $qtArchPath
+        Write-Host "Qt Install Path: $qtInstallPath"
+
+        # Add the bin directories to PATH
+        $binPaths = @("$qtInstallPath\bin", "$qtInstallPath\libexec")
+        foreach ($path in $binPaths) {
+            if (Test-Path $path) {
+                $env:PATH = "$path;$env:PATH"
+                Write-Host "Added to PATH: $path"
+            } else {
+                Write-Host "Warning: Path does not exist: $path"
+            }
+        }
+        # Verify the compiler is accessible
+        try {
+            $gppVersion = & g++ --version
+            Write-Host "g++ found: $($gppVersion[0])"
+        } catch {
+            Write-Host "Error: g++ not found in PATH."
+            Write-Host "Current PATH: $env:PATH"
+            exit 1
+        }
+        # Verify CMake and Ninja
+        try {
+            $cmakeVersion = & cmake --version
+            Write-Host "cmake found: $($cmakeVersion[0])"
+        } catch {
+            Write-Host "Error: cmake not found in PATH."
+            exit 1
+        }
+        try {
+            $ninjaVersion = & ninja --version
+            Write-Host "ninja found: $($ninjaVersion)"
+        } catch {
+            Write-Host "Error: ninja not found in PATH."
+            exit 1
+        }
+
 
     # 4. Build example
     - name: Build Example App (Linux/macOS)
@@ -81,13 +130,18 @@ jobs:
         cd example
         mkdir build
         cd build
-        # Make sure that the correct generator is used (Ninja or Visual Studio)
-        # If Qt was installed with MSVC, you may need "Visual Studio 17 2022", etc.
-        # cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
-        # cmake --build . --config Release
-        # But if Ninja is installed and running:
-        cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        # Ensure the correct generator is used and the compiler is found
+        # We rely on the PATH setup above to provide g++
+        cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=ninja
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "CMake configuration failed."
+            exit $LASTEXITCODE
+        }
         cmake --build .
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed."
+            exit $LASTEXITCODE
+        }
 
     # (Optional) Running the example (only if it is headless)
     # - name: Run Example App (Linux/macOS)
