@@ -100,32 +100,25 @@ jobs:
         mkdir build
         cd build
 
-        # Use the path provided by install-qt-action
-        $qtBase = "$env:QT_BASE_PATH"
-        $mingwFolder = Get-ChildItem $qtBase | Where-Object { $_.Name -like "*mingw*" } | Select-Object -First 1
-        if (-Not $mingwFolder) {
-            Write-Error "No MinGW folder found in $qtBase"
-            exit 1
-        }
-        $mingwBin = "$($mingwFolder.FullName)\bin"
+        # The Qt installation path is already in QT_BASE_PATH
+        $qtBin = "$env:QT_BASE_PATH\bin"
+        Write-Host "Using Qt binaries from: $qtBin"
 
-        Write-Host "Using MinGW from: $mingwBin"
-
-        # Check for g++.exe
-        if (-Not (Test-Path "$mingwBin\g++.exe")) {
-            Write-Error "g++.exe not found in $mingwBin"
+        # Check if g++.exe exists
+        if (-Not (Test-Path "$qtBin\g++.exe")) {
+            Write-Error "g++.exe not found in $qtBin"
             exit 1
         }
 
         # Set environment variables
-        $env:CXX = "$mingwBin\g++.exe"
-        $env:CC = "$mingwBin\gcc.exe"
-        $env:PATH = "$mingwBin;$env:PATH"
+        $env:CXX = "$qtBin\g++.exe"
+        $env:CC = "$qtBin\gcc.exe"
+        $env:PATH = "$qtBin;$env:PATH"
 
         # Run CMake
         cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release `
-                 -DCMAKE_C_COMPILER="$mingwBin\gcc.exe" `
-                 -DCMAKE_CXX_COMPILER="$mingwBin\g++.exe" `
+                 -DCMAKE_C_COMPILER="$qtBin\gcc.exe" `
+                 -DCMAKE_CXX_COMPILER="$qtBin\g++.exe" `
                  -DCMAKE_MAKE_PROGRAM=ninja
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -133,7 +126,7 @@ jobs:
         cmake --build .
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         
-        Write-Host "Build successful!"
+        Write-Host "✅ Build successful!"
 
     # (Optional) Running the example (only if it is headless)
     # - name: Run Example App (Linux/macOS)
