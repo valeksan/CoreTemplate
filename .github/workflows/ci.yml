@@ -100,11 +100,11 @@ jobs:
         mkdir build
         cd build
 
-        # Get the Qt bin path
-        $qtBin = "$env:QT_BASE_PATH\bin"
+        # QT_BASE_PATH is already the path to the MinGW bin directory (e.g., .../mingw_64)
+        $qtBin = "$env:QT_BASE_PATH"
         Write-Host "Using Qt binaries from: $qtBin"
 
-        # Find the correct compiler name (it's usually x86_64-w64-mingw32-g++.exe)
+        # Check for the compiler in $qtBin directly
         $gppFile = Get-ChildItem "$qtBin" | Where-Object { $_.Name -like "x86_64-w64-mingw32-g++.exe" } | Select-Object -First 1
         if (-Not $gppFile) {
             Write-Error "Compiler x86_64-w64-mingw32-g++.exe not found in $qtBin"
@@ -119,7 +119,7 @@ jobs:
         Write-Host "Found C++ compiler: $gppPath"
         Write-Host "Found C compiler: $gccPath"
 
-        # Set environment variables (correct syntax)
+        # Set environment variables
         $env:CXX = $gppPath
         $env:CC = $gccPath
         $env:PATH = "$qtBin;$env:PATH"
