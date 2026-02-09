@@ -1,4 +1,4 @@
-# 🚀 CoreTaskManager
+# 🚀 CoreTemplate
 
 A modern, header-only C++/Qt library for **safe and efficient task execution in separate threads**, with built-in support for grouping, cooperative stopping, and type-safe registration.
 
