@@ -1,0 +1,104 @@
+# .github/workflows/ci.yml
+name: CI
+
+# Start the build with a push to any branch and with a pull request in the main
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    # Choosing different operating systems for testing
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        # Defining the Qt architecture for each OS
+        include:
+          - os: ubuntu-latest
+            qt_arch: 'gcc_64'        # For Linux
+          - os: windows-latest
+            qt_arch: 'win64_mingw'   # For Windows (suitable for MinGW/LLVM-MinGW)
+          - os: macos-latest
+            qt_arch: 'clang_64'      # For macOS
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    # 1. Clone the repository
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 2. Installing Qt
+    # Uses the official action to install Qt
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.10.2' # target Qt version
+        host: ${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'windows-latest' && 'windows' || 'mac' }}
+        target: 'desktop'
+        arch: ${{ matrix.qt_arch }} 
+        # For Windows: arch: 'win64_msvc2019_64' or 'win64_mingw' (depending on your build)
+        # If you are using MinGW on Windows, change the arch below
+        modules: '' # Add modules if necessary, for example: 'qtcharts qtnetworkauth'
+        tools: ''
+
+    # 3. Installing CMake and Ninja (if not installed)
+    - name: Install CMake and Ninja (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+
+    - name: Install CMake and Ninja (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ninja
+
+    # For Windows, CMake and Ninja may already be installed with Qt, but you can make sure
+    - name: Install CMake and Ninja (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'
+        choco install ninja
+
+    # 4. Build example
+    - name: Build Example App (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: |
+        cd example
+        mkdir build
+        cd build
+        cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        cmake --build .
+
+    - name: Build Example App (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        cd example
+        mkdir build
+        cd build
+        # Make sure that the correct generator is used (Ninja or Visual Studio)
+        # If Qt was installed with MSVC, you may need "Visual Studio 17 2022", etc.
+        # cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+        # cmake --build . --config Release
+        # But if Ninja is installed and running:
+        cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        cmake --build .
+
+    # (Optional) Running the example (only if it is headless)
+    # - name: Run Example App (Linux/macOS)
+    #   if: runner.os != 'Windows'
+    #   run: |
+    #     cd example/build
+    #     ./ExampleApp # # or whatever the executable file is called.
+
+    # - name: Run Example App (Windows)
+    #   if: runner.os == 'Windows'
+    #   shell: pwsh
+    #   run: |
+    #     cd example/build
+    #     .\ExampleApp.exe # or whatever the executable file is called.
