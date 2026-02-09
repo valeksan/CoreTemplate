@@ -28,8 +28,8 @@ jobs:
           cd example
           mkdir build
           cd build
-          # Добавляем путь к MinGW в PATH
+          # Устанавливаем PATH, чтобы g++ был первым в списке
           $env:PATH = "$env:QT_BASE_PATH\bin;$env:PATH"
-          # Запускаем CMake, явно указывая компилятор через флаг (а не через env)
-          cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
+          # Указываем CMake использовать Ninja и найти Qt6
+          cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_FIND_ROOT_PATH="$env:QT_BASE_PATH"
           cmake --build .
