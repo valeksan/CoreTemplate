@@ -2,6 +2,7 @@
 
 A modern, header-only C++/Qt library for **safe and efficient task execution in separate threads**, with built-in support for grouping, cooperative stopping, and type-safe registration.
 
+[![Build Status](https://github.com/valeksan/CoreTemplate/actions/workflows/ci.yml/badge.svg)](https://github.com/valeksan/CoreTemplate/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-C++20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Qt](https://img.shields.io/badge/Qt-6.10+-green.svg)](https://www.qt.io/)
