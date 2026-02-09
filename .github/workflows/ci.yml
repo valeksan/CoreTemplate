@@ -28,7 +28,6 @@ jobs:
           cd example
           mkdir build
           cd build
-          # Используем MinGW Makefiles, а не Ninja
-          # Указываем CMAKE_PREFIX_PATH, чтобы CMake нашёл Qt
-          cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+          # Используем --fresh, чтобы игнорировать кэш
+          cmake .. -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" --fresh
           cmake --build .
