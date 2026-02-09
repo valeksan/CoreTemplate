@@ -2,7 +2,9 @@
 
 A modern, header-only C++/Qt library for **safe and efficient task execution in separate threads**, with built-in support for grouping, cooperative stopping, and type-safe registration.
 
- 💡 Think of it as a lightweight, flexible alternative to `QThreadPool` + `QFuture`, but with more control and cleaner C++20-style API.
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Language](https://img.shields.io/badge/language-C++20-blue.svg)](https://en.cppreference.com/w/cpp/20)
+[![Qt](https://img.shields.io/badge/Qt-6.10+-green.svg)](https://www.qt.io/)
 
 ## ✨ Why CoreTaskManager?
 
@@ -105,7 +107,7 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 ## Prerequisites
 
 - Qt6.x (tested with 6.10.2, but theoretically it can also work on Qt5)
-- C++17 compatible compiler
+- C++20 compatible compiler
 
 ## Basic Example
 
