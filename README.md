@@ -231,3 +231,7 @@ Group 1 Task 20 - Finished
 Task completed - ID: 1 Type: 2 Group: 1 Result: 400
 */
 ```
+
+## Support the Project
+
+If you find this library helpful and wish to support its development, feel free to use the Sponsor button on the right. Any support is voluntary and deeply appreciated, but entirely optional. The library remains free and open-source.
