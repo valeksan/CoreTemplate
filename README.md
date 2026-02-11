@@ -1,4 +1,4 @@
-# 🚀 CoreTemplate
+# 🧵 CoreTemplate
 
 A modern, header-only C++/Qt library for **safe and efficient task execution in separate threads**, with built-in support for grouping, cooperative stopping, and type-safe registration.
 
@@ -107,7 +107,7 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 
 ## Prerequisites
 
-- Qt6.x (tested with 6.10.2, but theoretically it can also work on Qt5)
+- Qt6.x (Tested on version 6.10.2 on Windows 10, but it should theoretically work on Qt5)
 - C++20 compatible compiler
 
 ## Basic Example
