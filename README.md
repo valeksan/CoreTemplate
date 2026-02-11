@@ -48,14 +48,14 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 
 ![example app screenshot](example/example_app_screenshot.jpg)
 
-## Features
+## 🧩 Features
 
 - Executes registered functions/lambdas/functors in dedicated threads.
 - Supports task grouping (only one task per group runs at a time).
 - Provides mechanisms for stopping and terminating tasks.
 - Allows querying task status (registered, idle, added by type/group).
 
-## Architecture and Usage Rules
+## 🏛️ Architecture and Usage Rules
 
 **IMPORTANT:** The `Core` class is **not thread-safe** for its public interface methods. To ensure stability:
 
@@ -63,7 +63,7 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 - Functions registered via `registerTask` are executed in their own dedicated threads managed by the library.
 - Code running inside a registered task function **should avoid calling public `Core` methods directly**, as this can lead to race conditions and undefined behavior. If a task needs to interact with the `Core`, it should use `QMetaObject::invokeMethod` to send a message to the main thread, which then performs the action safely.
 
-## Public API
+## 🧾 Core Interface
 
 - `registerTask`: Registers a function/lambda/functor for later execution by type.
 - `addTask`: Adds a registered task to the execution queue.
@@ -74,19 +74,19 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 - `groupByTask`: Get the group associated with a task type.
 - `stopTaskFlag`: Get a flag for the current thread to allow cooperative stopping within a task function.
 
-## Threading Model
+## 🧵 Threading Model
 
 1. Main Thread: Hosts the `Core` object. All public API calls should come from here.
 2. Task Threads: Created internally by the library for each task execution. Registered functions run here.
 3. Communication: Interaction between Task Threads and Main Thread happens via Qt's signal/slot mechanism (e.g., `TaskHelper::finished`) or `QTimer` events scheduled on the main thread (e.g., in `stopTask`).
 
-## Safety Considerations
+## 🛡️ Safety Considerations
 
-- Adhering to the single-threaded access rule for the public API is crucial.
+- Adhering to the single-threaded access rule for the public Core Interface is crucial.
 - Be cautious with `QTimer::singleShot` and `connect` callbacks if they access shared data outside of `Core`'s internal structures, especially if those accesses are not synchronized or atomic.
 - The `Core` class uses Qt types (`QList`, `QHash`, `QSharedPointer`) which manage their own lifetimes. However, the concurrent access to these types from different threads is avoided by the usage rules.
 
-## How It Works
+## ⚙️ How It Works
 
 1. An instance of the `Core` class is created.
 2. Callables are registered with `Core::registerTask(...)`, assigning them a unique `taskType` integer and optional group and timeout settings.
@@ -98,19 +98,19 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 8. Upon completion (normal, stopped, or terminated), the task emits a signal (`finishedTask`, `terminatedTask`) back to the main thread where the `Core` lives.
 9. The `Core` updates its internal lists of active and queued tasks and proceeds to start the next queued task if applicable.
 
-## Important Notes
+## 📌 Important Notes
 
 - **Platform Specifics:** The library uses `CreateThread`/`TerminateThread` on Windows and `pthread_create`/`pthread_cancel` on Unix-like systems for low-level thread management.
 - **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is intended for use *within* the executing task's thread.
 - **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
 - **Requirements:** Requires Qt 6.x (specifically tested against 6.10.2) and C++17 support.
 
-## Prerequisites
+## 📦 Prerequisites
 
 - Qt6.x (Tested on version 6.10.2 on Windows 10, but it should theoretically work on Qt5)
 - C++20 compatible compiler
 
-## Basic Example
+## ✏️ Basic Example
 
 ```cpp
 #include "core.h"
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
 }
 ```
 
-## Grouping Example
+## ✏️ Grouping Example
 
 ```cpp
 #include "core.h"
