@@ -240,3 +240,5 @@ If you find this library helpful and wish to support its development, feel free 
 **Currently, due to regional restrictions, I don’t have access to international payment systems like Visa or PayPal.**
 However, I do accept support via **cryptocurrency** (e.g., BTC). If you'd like to contribute this way, please [open an issue](https://github.com/valeksan/CoreTemplate/issues) or contact me directly — I’ll share the wallet details.
 I hope to gain access to standard financial tools in the future — perhaps after relocating to a place with fewer digital barriers. Until then, crypto is my only option for receiving global support.*
+
+***Just in case, I don't support wars!***
