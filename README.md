@@ -4,41 +4,72 @@ A modern, header-only C++/Qt library for **safe and efficient task execution in 
 
 [![Build Status](https://github.com/valeksan/CoreTemplate/actions/workflows/ci.yml/badge.svg)](https://github.com/valeksan/CoreTemplate/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Language](https://img.shields.io/badge/language-C++20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![Qt](https://img.shields.io/badge/Qt-6.10+-green.svg)](https://www.qt.io/)
+[![Language](https://img.shields.io/badge/language-C++17-blue.svg)](https://en.cppreference.com/w/cpp/17)
+[![Qt](https://img.shields.io/badge/Qt-5.12+-green.svg)](https://www.qt.io/)
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## ✨ Why CoreTaskManager?
+*[Русская версия](README_RU.md)*
+## Table of Contents
 
-- ✅ **Zero overhead**: Header-only, no extra dependencies.
-- ✅ **Type-safe**: Compile-time checks for function signatures (thanks to `std::function`, `if constexpr`, `std::any`).
-- ✅ **Grouping**: Run only one task per group (e.g., "network", "file I/O").
-- ✅ **Cooperative cancellation**: Tasks can check `stopTaskFlag()` and exit gracefully.
-- ✅ **Modern C++**: Uses `std::atomic`, `std::bind`, `enum class`, `QMetaType`, `QSharedPointer`.
+- [Features](#-features)
+- [Getting Started](#-getting-started)
+- [Example](#-example)
+- [Architecture and Usage Rules](#architecture-and-usage-rules)
+- [Public Methods](#public-methods)
+- [Threading Model](#threading-model)
+- [Safety Considerations](#safety-considerations)
+- [How It Works](#how-it-works)
+- [Important Notes](#important-notes)
+- [Prerequisites](#prerequisites)
+- [Basic Example](#basic-example)
+- [Grouping Example](#grouping-example)
+- [Support the Project](#support-the-project)
 
-## 🚀 Quick Start
+
+## ✨ Features
+
+- ✅ **Header-only, zero overhead**: No extra dependencies, just copy `core.h` into your project.
+- ✅ **Type-safe registration**: Compile-time checks for function signatures using `std::function`, `if constexpr`, and `std::any`.
+- ✅ **Task grouping**: Run only one task per group (e.g., "network", "file I/O") to serialize access to shared resources.
+- ✅ **Cooperative stopping**: Tasks can check `stopTaskFlag()` and exit gracefully, with configurable timeouts.
+- ✅ **Modern C++17**: Utilizes `std::atomic`, `std::bind`, `enum class`, `QMetaType`, and `QSharedPointer`.
+- ✅ **Dedicated thread execution**: Each registered function runs in its own managed thread, avoiding blocking the main thread.
+- ✅ **Comprehensive task management**: Register, unregister, add, stop, terminate, and query tasks by type, group, or ID.
+- ✅ **Status queries**: Check if a task is registered, idle, added, or active.
+
+## 🚀 Getting Started
+
+Make sure you have **Qt 5.12 or later** and a **C++17 compatible compiler** (see [Prerequisites](#prerequisites) for details).
+
+### Installation
+
+Just copy `core.h` into your project. It's header‑only!
+
+### Quick Start
 
 ```cpp
 // 1. Init task manager
 auto m_pCore = new Core();
 
 // 2. Register a task
-m_pCore->registerTask(TASK_CALCULATE, [](int a, int b) -> int {
+m_pCore->registerTask(1, [](int a, int b) -> int {
     QThread::msleep(100); // Simulate work
     return a + b;
 });
 
 // 3. Add it to the queue
-m_pCore->addTask(TASK_CALCULATE, 10, 20);
+m_pCore->addTask(1, 10, 20);
 
 // 4. Handle result
-connect(m_pCore, &Core::finishedTask, this, [](TaskId id, TaskType type, const QVariant& result) {
+connect(m_pCore, &Core::finishedTask, this, [](TaskId id, TaskType type, const QVariantList& argsList, const QVariant& result) {
+    Q_UNUSED(id);
+    Q_UNUSED(type);
+    Q_UNUSED(argsList);
     qDebug() << "Result:" << result.toInt();
 });
 ```
 
-## 📦 Installation
-
-Just copy core.h into your project. It's header-only!
+> **Note:** The example above uses heap allocation (`new Core()`). You can also create a `Core` object on the stack (e.g., `Core core;`) as shown in the Basic Example below.
 
 ## 🧪 Example
 
@@ -48,13 +79,6 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 
 ![example app screenshot](example/example_app_screenshot.jpg)
 
-## Features
-
-- Executes registered functions/lambdas/functors in dedicated threads.
-- Supports task grouping (only one task per group runs at a time).
-- Provides mechanisms for stopping and terminating tasks.
-- Allows querying task status (registered, idle, added by type/group).
-
 ## Architecture and Usage Rules
 
 **IMPORTANT:** The `Core` class is **not thread-safe** for its public interface methods. To ensure stability:
@@ -63,7 +87,9 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 - Functions registered via `registerTask` are executed in their own dedicated threads managed by the library.
 - Code running inside a registered task function **should avoid calling public `Core` methods directly**, as this can lead to race conditions and undefined behavior. If a task needs to interact with the `Core`, it should use `QMetaObject::invokeMethod` to send a message to the main thread, which then performs the action safely.
 
-## Public API
+## Public Methods
+
+The complete API is defined in the header file `core.h`. Refer to the source code for detailed documentation.
 
 - `registerTask`: Registers a function/lambda/functor for later execution by type.
 - `addTask`: Adds a registered task to the execution queue.
@@ -103,12 +129,12 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 - **Platform Specifics:** The library uses `CreateThread`/`TerminateThread` on Windows and `pthread_create`/`pthread_cancel` on Unix-like systems for low-level thread management.
 - **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is intended for use *within* the executing task's thread.
 - **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
-- **Requirements:** Requires Qt 6.x (specifically tested against 6.10.2) and C++17 support.
+- **Requirements:** Requires Qt 5.12 or later (tested with Qt 6.10.2) and C++17 support.
 
 ## Prerequisites
 
-- Qt6.x (tested with 6.10.2, but theoretically it can also work on Qt5)
-- C++20 compatible compiler
+- Qt 5.12 or later (tested with Qt 6.10.2)
+- C++17 compatible compiler
 
 ## Basic Example
 

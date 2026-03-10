@@ -55,3 +55,4 @@ build/
 CMakeCache.txt
 CMakeFiles/
 *.cmake
+.vscode/c_cpp_properties.json
