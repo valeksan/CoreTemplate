@@ -1,4 +1,4 @@
-# 🚀 CoreTemplate
+# 🧵 CoreTemplate
 
 A modern, header-only C++/Qt library for **safe and efficient task execution in separate threads**, with built-in support for grouping, cooperative stopping, and type-safe registration.
 
@@ -79,7 +79,18 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 
 ![example app screenshot](example/example_app_screenshot.jpg)
 
+<<<<<<< HEAD
 ## Architecture and Usage Rules
+=======
+## 🧩 Features
+
+- Executes registered functions/lambdas/functors in dedicated threads.
+- Supports task grouping (only one task per group runs at a time).
+- Provides mechanisms for stopping and terminating tasks.
+- Allows querying task status (registered, idle, added by type/group).
+
+## 🏛️ Architecture and Usage Rules
+>>>>>>> 0d1c10f28ee090babdfc3accd1cc04949b40e90c
 
 **IMPORTANT:** The `Core` class is **not thread-safe** for its public interface methods. To ensure stability:
 
@@ -87,9 +98,13 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 - Functions registered via `registerTask` are executed in their own dedicated threads managed by the library.
 - Code running inside a registered task function **should avoid calling public `Core` methods directly**, as this can lead to race conditions and undefined behavior. If a task needs to interact with the `Core`, it should use `QMetaObject::invokeMethod` to send a message to the main thread, which then performs the action safely.
 
+<<<<<<< HEAD
 ## Public Methods
 
 The complete API is defined in the header file `core.h`. Refer to the source code for detailed documentation.
+=======
+## 🧾 Core Interface
+>>>>>>> 0d1c10f28ee090babdfc3accd1cc04949b40e90c
 
 - `registerTask`: Registers a function/lambda/functor for later execution by type.
 - `addTask`: Adds a registered task to the execution queue.
@@ -100,19 +115,19 @@ The complete API is defined in the header file `core.h`. Refer to the source cod
 - `groupByTask`: Get the group associated with a task type.
 - `stopTaskFlag`: Get a flag for the current thread to allow cooperative stopping within a task function.
 
-## Threading Model
+## 🧵 Threading Model
 
 1. Main Thread: Hosts the `Core` object. All public API calls should come from here.
 2. Task Threads: Created internally by the library for each task execution. Registered functions run here.
 3. Communication: Interaction between Task Threads and Main Thread happens via Qt's signal/slot mechanism (e.g., `TaskHelper::finished`) or `QTimer` events scheduled on the main thread (e.g., in `stopTask`).
 
-## Safety Considerations
+## 🛡️ Safety Considerations
 
-- Adhering to the single-threaded access rule for the public API is crucial.
+- Adhering to the single-threaded access rule for the public Core Interface is crucial.
 - Be cautious with `QTimer::singleShot` and `connect` callbacks if they access shared data outside of `Core`'s internal structures, especially if those accesses are not synchronized or atomic.
 - The `Core` class uses Qt types (`QList`, `QHash`, `QSharedPointer`) which manage their own lifetimes. However, the concurrent access to these types from different threads is avoided by the usage rules.
 
-## How It Works
+## ⚙️ How It Works
 
 1. An instance of the `Core` class is created.
 2. Callables are registered with `Core::registerTask(...)`, assigning them a unique `taskType` integer and optional group and timeout settings.
@@ -124,19 +139,24 @@ The complete API is defined in the header file `core.h`. Refer to the source cod
 8. Upon completion (normal, stopped, or terminated), the task emits a signal (`finishedTask`, `terminatedTask`) back to the main thread where the `Core` lives.
 9. The `Core` updates its internal lists of active and queued tasks and proceeds to start the next queued task if applicable.
 
-## Important Notes
+## 📌 Important Notes
 
 - **Platform Specifics:** The library uses `CreateThread`/`TerminateThread` on Windows and `pthread_create`/`pthread_cancel` on Unix-like systems for low-level thread management.
 - **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is intended for use *within* the executing task's thread.
 - **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
 - **Requirements:** Requires Qt 5.12 or later (tested with Qt 6.10.2) and C++17 support.
 
-## Prerequisites
+## 📦 Prerequisites
 
+<<<<<<< HEAD
 - Qt 5.12 or later (tested with Qt 6.10.2)
 - C++17 compatible compiler
+=======
+- Qt6.x (Tested on version 6.10.2 on Windows 10, but it should theoretically work on Qt5)
+- C++20 compatible compiler
+>>>>>>> 0d1c10f28ee090babdfc3accd1cc04949b40e90c
 
-## Basic Example
+## ✏️ Basic Example
 
 ```cpp
 #include "core.h"
@@ -177,7 +197,7 @@ int main(int argc, char *argv[])
 }
 ```
 
-## Grouping Example
+## ✏️ Grouping Example
 
 ```cpp
 #include "core.h"
@@ -258,6 +278,13 @@ Task completed - ID: 1 Type: 2 Group: 1 Result: 400
 */
 ```
 
-## Support the Project
+## ☕ Support the Project
 
 If you find this library helpful and wish to support its development, feel free to use the Sponsor button. Any support is voluntary and deeply appreciated, but entirely optional. The library remains free and open-source.
+
+*P.S.
+**Currently, due to regional restrictions, I don’t have access to international payment systems like Visa or PayPal.**
+However, I do accept support via **cryptocurrency** (e.g., BTC). If you'd like to contribute this way, please [open an issue](https://github.com/valeksan/CoreTemplate/issues) or contact me directly — I’ll share the wallet details.
+I hope to gain access to standard financial tools in the future — perhaps after relocating to a place with fewer digital barriers. Until then, crypto is my only option for receiving global support.*
+
+***Just in case, I don't support wars!***
