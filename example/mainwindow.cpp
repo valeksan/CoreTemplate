@@ -97,6 +97,10 @@ MainWindow::MainWindow(QWidget *parent)
     // We use a lambda that checks the stop flag
     m_pCore->registerTask(TASK_STOPPABLE, [this]() {
         auto stopFlag = m_pCore->stopTaskFlag(); // Getting the stop flag for the current stream
+        if (!stopFlag) {
+            qDebug() << "TASK_STOPPABLE - No stop flag, exiting.";
+            return;
+        }
         int counter = 0;
         while (counter < 10 && !stopFlag->load()) { // // Checking the flag
             qDebug() << "TASK_STOPPABLE - Iteration:" << counter << "on thread:" << QThread::currentThread();
@@ -125,6 +129,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_pCore->registerTask(TASK_STOPPABLE_WITH_ARG, [this](int durationSeconds) {
         int remaining = durationSeconds;
         auto stopFlag = m_pCore->stopTaskFlag();
+        if (!stopFlag) {
+            qDebug() << "TASK_STOPPABLE_WITH_ARG - No stop flag, exiting.";
+            return;
+        }
         while (remaining > 0 && !stopFlag->load()) {
             qDebug() << "TASK_STOPPABLE_WITH_ARG - Remaining time:" << remaining << "seconds on thread:" << QThread::currentThread();
             QThread::msleep(1000);
@@ -138,11 +146,10 @@ MainWindow::MainWindow(QWidget *parent)
     }, 2); // Group 2.
 
     // 4. A task that calls a class method (not const)
-    Calculator calc;
-    m_pCore->registerTask(TASK_CLASS_METHOD, &Calculator::add, &calc);
+    m_pCore->registerTask(TASK_CLASS_METHOD, &Calculator::add, &m_calculator);
 
     // 5. The task that calls the const method of the class
-    m_pCore->registerTask(TASK_CLASS_CONST_METHOD, &Calculator::multiply, &calc);
+    m_pCore->registerTask(TASK_CLASS_CONST_METHOD, &Calculator::multiply, &m_calculator);
 
     // 6. A task that calls a free function with a return value
     m_pCore->registerTask(TASK_FREE_FUNCTION_RETURN, calculateSum);
@@ -177,6 +184,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Task completion signal
     connect(m_pCore, &Core::finishedTask, this, [this](TaskId id, TaskType type, const QVariantList& argsList, const QVariant& result) {
+        Q_UNUSED(argsList);
         QString info = QString("ID: %1, Type: %2").arg(id).arg(type);
         ui->textEdit->append(QString("Task (%1) finished.").arg(info));
 

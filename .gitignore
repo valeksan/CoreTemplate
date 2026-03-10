@@ -56,3 +56,5 @@ CMakeCache.txt
 CMakeFiles/
 *.cmake
 .vscode/c_cpp_properties.json
+example/.qmake.stash
+example/release/ExampleApp.exe

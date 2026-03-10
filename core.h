@@ -20,6 +20,9 @@
 #include <QMetaType>
 #include <QDebug>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QThread>
+#include <QMutex>
 
 // --- Threading/Multiprocessing API Headers ---
 #ifdef Q_OS_WIN
@@ -200,6 +203,7 @@ private:
     QList<QSharedPointer<Task>> m_activeTaskList;
     QList<QSharedPointer<Task>> m_queuedTaskList;
     std::atomic_bool m_blockStartTask{false};
+    mutable QMutex m_activeTaskMutex;
 
 signals:
     void finishedTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, QVariant result = QVariant());
@@ -470,11 +474,49 @@ inline QSharedPointer<Core::Task> Core::activeTaskByGroup(TaskGroup group) {
 }
 
 inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
+    // Set stop flag to request cooperative cancellation
+    pTask->m_stopFlag.store(true);
+
+    // Determine timeout from task's registered stop timeout
+    TaskStopTimeout timeout = DEFAULT_STOP_TIMEOUT;
+    if (m_taskHash.contains(pTask->m_type)) {
+        timeout = m_taskHash[pTask->m_type].m_stopTimeout;
+    }
+
+    // Wait for thread to exit gracefully
+    bool threadExited = false;
 #ifdef Q_OS_WIN
-    TerminateThread(pTask->m_threadHandle, 0);
+    if (pTask->m_threadHandle) {
+        DWORD waitResult = WaitForSingleObject(pTask->m_threadHandle, timeout);
+        threadExited = (waitResult == WAIT_OBJECT_0);
+        if (threadExited) {
+            CloseHandle(pTask->m_threadHandle);
+            pTask->m_threadHandle = nullptr;
+        }
+    }
 #else
-    pthread_cancel(pTask->m_threadHandle);
+    // For POSIX, we cannot join a detached thread, so we poll with pthread_kill
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < timeout) {
+        if (pthread_kill(pTask->m_threadHandle, 0) != 0) {
+            // thread is no longer alive (ESRCH)
+            threadExited = true;
+            break;
+        }
+        QThread::msleep(10);
+    }
 #endif
+
+    if (threadExited) {
+        qDebug() << QString("Task %1 exited gracefully after stop flag").arg(QString::number(pTask->m_id));
+    } else {
+        qWarning() << QString("Task %1 did not respond within timeout (%2 ms)").arg(QString::number(pTask->m_id)).arg(timeout);
+        // Avoid forced termination; just log warning and leave thread running.
+        // The task remains in active list, but we still emit terminatedTask for consistency?
+        // We'll still treat it as terminated from the manager's perspective.
+    }
+
     pTask->m_state = TaskState::Terminated;
     emit terminatedTask(pTask->m_id, pTask->m_type, pTask->m_argsList);
     m_activeTaskList.removeAll(pTask);
