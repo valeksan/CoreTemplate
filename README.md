@@ -1,4 +1,4 @@
-# 🧵 CoreTemplate
+#🧵 CoreTemplate
 
 A modern, header-only C++/Qt library for **safe and efficient task execution in separate threads**, with built-in support for grouping, cooperative stopping, and type-safe registration.
 
@@ -79,18 +79,7 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 
 ![example app screenshot](example/example_app_screenshot.jpg)
 
-<<<<<<< HEAD
 ## Architecture and Usage Rules
-=======
-## 🧩 Features
-
-- Executes registered functions/lambdas/functors in dedicated threads.
-- Supports task grouping (only one task per group runs at a time).
-- Provides mechanisms for stopping and terminating tasks.
-- Allows querying task status (registered, idle, added by type/group).
-
-## 🏛️ Architecture and Usage Rules
->>>>>>> 0d1c10f28ee090babdfc3accd1cc04949b40e90c
 
 **IMPORTANT:** The `Core` class is **not thread-safe** for its public interface methods. To ensure stability:
 
@@ -98,13 +87,9 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 - Functions registered via `registerTask` are executed in their own dedicated threads managed by the library.
 - Code running inside a registered task function **should avoid calling public `Core` methods directly**, as this can lead to race conditions and undefined behavior. If a task needs to interact with the `Core`, it should use `QMetaObject::invokeMethod` to send a message to the main thread, which then performs the action safely.
 
-<<<<<<< HEAD
 ## Public Methods
 
-The complete API is defined in the header file `core.h`. Refer to the source code for detailed documentation.
-=======
-## 🧾 Core Interface
->>>>>>> 0d1c10f28ee090babdfc3accd1cc04949b40e90c
+The complete listing is defined in the header file `core.h`. Refer to the source code for detailed documentation.
 
 - `registerTask`: Registers a function/lambda/functor for later execution by type.
 - `addTask`: Adds a registered task to the execution queue.
@@ -148,13 +133,8 @@ The complete API is defined in the header file `core.h`. Refer to the source cod
 
 ## 📦 Prerequisites
 
-<<<<<<< HEAD
 - Qt 5.12 or later (tested with Qt 6.10.2)
 - C++17 compatible compiler
-=======
-- Qt6.x (Tested on version 6.10.2 on Windows 10, but it should theoretically work on Qt5)
-- C++20 compatible compiler
->>>>>>> 0d1c10f28ee090babdfc3accd1cc04949b40e90c
 
 ## ✏️ Basic Example
 
