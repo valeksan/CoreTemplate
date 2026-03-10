@@ -1,6 +1,9 @@
 // core.h
 #ifndef CORE_H
 #define CORE_H
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200112L   // POSIX.1-2001 (includes pthread_kill)
+#endif
 
 // --- Import the headers of the standard library ---
 #include <atomic>
@@ -30,6 +33,7 @@
     #include <process.h>
 #else
     #include <pthread.h>
+    #include <signal.h>
 #endif
 
 // --- Using aliases to improve readability ---
@@ -496,15 +500,20 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
     }
 #else
     // For POSIX, we cannot join a detached thread, so we poll with pthread_kill
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeout) {
-        if (pthread_kill(pTask->m_threadHandle, 0) != 0) {
-            // thread is no longer alive (ESRCH)
-            threadExited = true;
-            break;
+    if (pTask->m_threadHandle != 0) {
+        QElapsedTimer timer;
+        timer.start();
+        while (timer.elapsed() < timeout) {
+            if (pthread_kill(pTask->m_threadHandle, 0) != 0) {
+                // thread is no longer alive (ESRCH)
+                threadExited = true;
+                break;
+            }
+            QThread::msleep(10);
         }
-        QThread::msleep(10);
+    } else {
+        // thread handle is invalid, treat as already exited
+        threadExited = true;
     }
 #endif
 
