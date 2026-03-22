@@ -14,6 +14,7 @@ private slots:
     void cancelTaskByIdStopsCooperatively();
     void stopsTaskCooperativelyByFlag();
     void stopAllTasksStopsQueuedAndActive();
+    void stopTasksBlocksQueueDuringStopAndResumesAfterActiveStops();
     void stopTasksByGroupWithQueuedOnlyAffectsSelectedGroup();
     void cancelTasksByGroupAliasWorks();
     void cancelAllTasksAliasWorks();
@@ -173,6 +174,60 @@ void CoreTests::stopAllTasksStopsQueuedAndActive() {
         }
     }
     QVERIFY(activeStoppedCooperatively);
+}
+
+void CoreTests::stopTasksBlocksQueueDuringStopAndResumesAfterActiveStops() {
+    Core core;
+
+    core.registerTask(33, [&core](int tag) -> int {
+        for (int i = 0; i < 600; ++i) {
+            if (auto* stop = core.stopTaskFlag(); stop && stop->load()) {
+                return -tag;
+            }
+            QThread::msleep(2);
+        }
+        return tag;
+    }, 33, 120);
+
+    core.registerTask(34, [](int tag) -> int {
+        return tag * 10;
+    }, 33, 120);
+
+    QSignalSpy finishedSpy(&core, &Core::finishedTask);
+    QVERIFY(finishedSpy.isValid());
+
+    core.addTask(33, 1); // active
+    core.addTask(34, 2); // queued in same group
+
+    QTest::qWait(20);
+    core.stopTasks();
+
+    QTRY_VERIFY_WITH_TIMEOUT(finishedSpy.count() >= 1, 5000);
+
+    const int countAfterActiveStop = finishedSpy.count();
+    QTest::qWait(60); // less than stop timeout (120 ms): queue should still be blocked
+    QCOMPARE(finishedSpy.count(), countAfterActiveStop);
+
+    QTRY_COMPARE_WITH_TIMEOUT(finishedSpy.count(), 2, 5000);
+
+    bool activeStopped = false;
+    bool queuedResumed = false;
+    for (const QList<QVariant>& event : finishedSpy) {
+        const QVariantList args = event.at(2).toList();
+        if (args.isEmpty()) {
+            continue;
+        }
+        const int tag = args.first().toInt();
+        const int result = event.at(3).toInt();
+        if (tag == 1 && result == -1) {
+            activeStopped = true;
+        }
+        if (tag == 2 && result == 20) {
+            queuedResumed = true;
+        }
+    }
+    QVERIFY(activeStopped);
+    QVERIFY(queuedResumed);
 }
 
 void CoreTests::stopTasksByGroupWithQueuedOnlyAffectsSelectedGroup() {

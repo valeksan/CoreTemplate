@@ -314,6 +314,11 @@ void Core::registerTask(TaskType taskType, R (*taskFunction)(Args...), TaskGroup
 
 template <typename Class, typename R, typename... Args>
 void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...), Class* taskObj, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
+    if (taskObj == nullptr) {
+        qWarning() << "Core::registerTask - task object is null for task type:" << taskType;
+        throw std::logic_error("Task object is null");
+    }
+
     // Direct call to bind_placeholders and registerTask with explicit std::function signature
     auto boundFunc = bind_placeholders(taskMethod, taskObj, std::make_index_sequence<sizeof...(Args)>());
     // Use deduction guide for std::function
@@ -322,6 +327,11 @@ void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...), Clas
 
 template <typename Class, typename R, typename... Args>
 void Core::registerTask(TaskType taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
+    if (taskObj == nullptr) {
+        qWarning() << "Core::registerTask - task object is null for task type:" << taskType;
+        throw std::logic_error("Task object is null");
+    }
+
     auto boundFunc = bind_placeholders(taskMethod, taskObj, std::make_index_sequence<sizeof...(Args)>());
     // Use deduction guide for std::function
     registerTask(taskType, static_cast<std::function<R(Args...)>>(std::move(boundFunc)), taskGroup, taskStopTimeout);
