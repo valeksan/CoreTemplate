@@ -1,16 +1,20 @@
 # .github/workflows/ci.yml
 name: CI
 
-# Trigger only when core.h is modified
+# Trigger when core/test/workflow files are modified
 on:
   push:
     paths:
-      - 'core.h'              # Relative path to the file in the repository root
-      - '.github/workflows/ci.yml'  # Also trigger if the workflow file itself is changed
+      - 'core.h'
+      - 'example/**'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
     branches: [ "main", "master" ]
   pull_request:
     paths:
       - 'core.h'
+      - 'example/**'
+      - 'tests/**'
       - '.github/workflows/ci.yml'
     branches: [ "main", "master" ]
 
@@ -58,8 +62,14 @@ jobs:
     # Build the example
     - name: Build Example App
       run: |
-        cd example
-        mkdir build
-        cd build
-        cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
-        cmake --build .
+        cmake -S example -B example/build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        cmake --build example/build
+
+    - name: Build Tests
+      run: |
+        cmake -S tests -B tests/build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        cmake --build tests/build
+
+    - name: Run Tests
+      run: |
+        ctest --test-dir tests/build --output-on-failure
