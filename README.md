@@ -94,7 +94,7 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 - `registerTask`: Registers a function/lambda/functor for later execution by type.
 - `addTask`: Adds a registered task to the execution queue.
 - `unregisterTask`: Removes a task type from registration.
-- `cancelTaskById`, `stopTaskById`, `stopTaskByType`, `stopTaskByGroup`, `stopTasks`: Request graceful (cooperative) stop of tasks.
+- `cancelTaskById`, `cancelTaskByType`, `cancelTaskByGroup`, `cancelTasks`, `cancelAllTasks`, `cancelTasksByGroup` (and backward-compatible `stop...` methods): Request graceful (cooperative) cancellation of tasks.
 - `terminateTaskById`: Requests stop, waits up to timeout, then attempts force-termination if task is still running.
 - `isTaskRegistered`, `isIdle`, `isTaskAddedByType`, `isTaskAddedByGroup`: Query task status.
 - `groupByTask`: Get the group associated with a task type.

@@ -11,9 +11,11 @@ class CoreTests final : public QObject {
 private slots:
     void executesRegisteredTaskAndEmitsFinished();
     void serializesTasksWithinSameGroup();
+    void cancelTaskByIdStopsCooperatively();
     void stopsTaskCooperativelyByFlag();
     void stopAllTasksStopsQueuedAndActive();
     void stopTasksByGroupWithQueuedOnlyAffectsSelectedGroup();
+    void cancelTasksByGroupAliasWorks();
     void unregisterTaskFailsForActiveAndQueued();
 };
 
@@ -61,6 +63,37 @@ void CoreTests::serializesTasksWithinSameGroup() {
 
     QTRY_COMPARE_WITH_TIMEOUT(finishedSpy.count(), 2, 5000);
     QCOMPARE(maxInGroup.load(), 1);
+}
+
+void CoreTests::cancelTaskByIdStopsCooperatively() {
+    Core core;
+
+    core.registerTask(14, [&core]() -> int {
+        for (int i = 0; i < 500; ++i) {
+            if (auto* stop = core.stopTaskFlag(); stop && stop->load()) {
+                return -14;
+            }
+            QThread::msleep(2);
+        }
+        return 14;
+    }, 14, 100);
+
+    QSignalSpy startedSpy(&core, &Core::startedTask);
+    QSignalSpy finishedSpy(&core, &Core::finishedTask);
+    QVERIFY(startedSpy.isValid());
+    QVERIFY(finishedSpy.isValid());
+
+    core.addTask(14);
+    QTRY_COMPARE_WITH_TIMEOUT(startedSpy.count(), 1, 2000);
+
+    const QList<QVariant> startedEvent = startedSpy.takeFirst();
+    const auto id = static_cast<TaskId>(startedEvent.at(0).toLongLong());
+    core.cancelTaskById(id);
+
+    QTRY_COMPARE_WITH_TIMEOUT(finishedSpy.count(), 1, 5000);
+    const QList<QVariant> event = finishedSpy.takeFirst();
+    QCOMPARE(event.at(1).toInt(), 14);
+    QCOMPARE(event.at(3).toInt(), -14);
 }
 
 void CoreTests::stopsTaskCooperativelyByFlag() {
@@ -208,6 +241,53 @@ void CoreTests::stopTasksByGroupWithQueuedOnlyAffectsSelectedGroup() {
     }
     QVERIFY(group1ActiveStopped);
     QVERIFY(group2Completed);
+}
+
+void CoreTests::cancelTasksByGroupAliasWorks() {
+    Core core;
+
+    core.registerTask(45, [&core](int tag) -> int {
+        for (int i = 0; i < 500; ++i) {
+            if (auto* stop = core.stopTaskFlag(); stop && stop->load()) {
+                return -tag;
+            }
+            QThread::msleep(2);
+        }
+        return tag;
+    }, 9, 150);
+
+    core.registerTask(46, [&core](int tag) -> int {
+        for (int i = 0; i < 500; ++i) {
+            if (auto* stop = core.stopTaskFlag(); stop && stop->load()) {
+                return -tag;
+            }
+            QThread::msleep(2);
+        }
+        return tag;
+    }, 9, 150);
+
+    QSignalSpy finishedSpy(&core, &Core::finishedTask);
+    QSignalSpy terminatedSpy(&core, &Core::terminatedTask);
+    QVERIFY(finishedSpy.isValid());
+    QVERIFY(terminatedSpy.isValid());
+
+    core.addTask(45, 1);
+    core.addTask(46, 2);
+    QTest::qWait(20);
+    core.cancelTasksByGroup(9, true);
+
+    QTRY_VERIFY_WITH_TIMEOUT(finishedSpy.count() >= 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(terminatedSpy.count() >= 1, 5000);
+
+    bool queuedCancelled = false;
+    for (const QList<QVariant>& event : terminatedSpy) {
+        const QVariantList args = event.at(2).toList();
+        if (!args.isEmpty() && args.first().toInt() == 2) {
+            queuedCancelled = true;
+            break;
+        }
+    }
+    QVERIFY(queuedCancelled);
 }
 
 void CoreTests::unregisterTaskFailsForActiveAndQueued() {

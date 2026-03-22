@@ -84,7 +84,7 @@ connect(m_pCore, &Core::finishedTask, this, [](TaskId id, TaskType type, const Q
 
 **ВАЖНО:** Класс `Core` **не является потокобезопасным** для своих публичных методов. Для обеспечения стабильности:
 
-- **Все вызовы публичных методов** (например, `registerTask`, `addTask`, `stopTaskById`, `terminateTaskById`, `isTask...` и т.д.) **должны происходить из того же потока**, в котором живёт объект `Core`. Обычно это **главный GUI‑поток**.
+- **Все вызовы публичных методов** (например, `registerTask`, `addTask`, `cancelTaskById`, `terminateTaskById`, `isTask...` и т.д.) **должны происходить из того же потока**, в котором живёт объект `Core`. Обычно это **главный GUI‑поток**.
 - Функции, зарегистрированные через `registerTask`, выполняются в собственных выделенных потоках, управляемых библиотекой.
 - Код, выполняющийся внутри зарегистрированной задачи, **должен избегать прямых вызовов публичных методов `Core`**, так как это может привести к состоянию гонки и неопределённому поведению. Если задаче необходимо взаимодействовать с `Core`, следует использовать `QMetaObject::invokeMethod` для отправки сообщения в главный поток, который затем безопасно выполнит действие.
 
@@ -95,8 +95,9 @@ connect(m_pCore, &Core::finishedTask, this, [](TaskId id, TaskType type, const Q
 - `registerTask`: Регистрирует функцию/лямбду/функтор для последующего выполнения по типу.
 - `addTask`: Добавляет зарегистрированную задачу в очередь выполнения.
 - `unregisterTask`: Удаляет тип задачи из регистрации.
-- `stopTaskById`, `stopTaskByType`, `stopTaskByGroup`, `stopTasks`: Запрашивают плавную остановку задач.
-- `terminateTaskById`: Принудительно завершает задачу по ID.
+- `cancelTaskById`, `cancelTaskByType`, `cancelTaskByGroup`, `cancelTasks`, `cancelAllTasks`, `cancelTasksByGroup`: Запрашивают кооперативную (плавную) отмену задач.
+- `stopTaskById`, `stopTaskByType`, `stopTaskByGroup`, `stopTasks`, `stopAllTasks`, `stopTasksByGroup`: Сохранены для обратной совместимости и эквивалентны `cancel...`.
+- `terminateTaskById`: Более сильный путь — сначала запрашивает кооперативную остановку, затем пытается форсировать завершение при превышении timeout.
 - `isTaskRegistered`, `isIdle`, `isTaskAddedByType`, `isTaskAddedByGroup`: Запрос статуса задачи.
 - `groupByTask`: Получает группу, связанную с типом задачи.
 - `stopTaskFlag`: Получает флаг для текущего потока, позволяющий кооперативную остановку внутри функции задачи.
@@ -266,7 +267,7 @@ Task completed - ID: 1 Type: 2 Group: 1 Result: 400
 ## Current Implementation Notes (as of March 22, 2026)
 
 - Public `Core` API is single-thread affinity API: call it only from the thread that owns `Core` (typically GUI/main thread).
-- Use `cancelTaskById` (or `stopTaskById`/`stopTaskByType`/`stopTaskByGroup`) for cooperative cancellation.
+- Use `cancelTaskById` / `cancelTaskByType` / `cancelTaskByGroup` / `cancelTasks` / `cancelAllTasks` / `cancelTasksByGroup` (or backward-compatible `stop...` methods) for cooperative cancellation.
 - `terminateTaskById` first requests cooperative stop and then attempts force-termination after timeout.
 - Task cancellation is cooperative: long-running tasks should periodically check `stopTaskFlag()`.
 - On timeout, manager emits `stopTimedOutTask` if worker still runs; if force-termination succeeds, it emits `terminatedTask`.

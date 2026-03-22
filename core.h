@@ -139,6 +139,11 @@ public:
 
     std::atomic_bool* stopTaskFlag();
     void cancelTaskById(TaskId id);
+    void cancelTaskByType(TaskType type);
+    void cancelTaskByGroup(TaskGroup group);
+    void cancelTasks();
+    void cancelAllTasks();
+    void cancelTasksByGroup(TaskGroup group, bool includeQueued);
     void terminateTaskById(TaskId id);
     void stopTaskById(TaskId id);
     void stopTaskByType(TaskType type);
@@ -411,6 +416,41 @@ inline void Core::cancelTaskById(TaskId id) {
         return;
     }
     stopTaskById(id);
+}
+
+inline void Core::cancelTaskByType(TaskType type) {
+    if (!ensureCalledFromOwnerThread("cancelTaskByType")) {
+        return;
+    }
+    stopTaskByType(type);
+}
+
+inline void Core::cancelTaskByGroup(TaskGroup group) {
+    if (!ensureCalledFromOwnerThread("cancelTaskByGroup")) {
+        return;
+    }
+    stopTaskByGroup(group);
+}
+
+inline void Core::cancelTasks() {
+    if (!ensureCalledFromOwnerThread("cancelTasks")) {
+        return;
+    }
+    stopTasks();
+}
+
+inline void Core::cancelAllTasks() {
+    if (!ensureCalledFromOwnerThread("cancelAllTasks")) {
+        return;
+    }
+    stopAllTasks();
+}
+
+inline void Core::cancelTasksByGroup(TaskGroup group, bool includeQueued) {
+    if (!ensureCalledFromOwnerThread("cancelTasksByGroup")) {
+        return;
+    }
+    stopTasksByGroup(group, includeQueued);
 }
 
 inline void Core::stopTaskById(TaskId id) {
