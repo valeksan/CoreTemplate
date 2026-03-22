@@ -12,10 +12,10 @@
 #include <type_traits>
 #include <algorithm>
 #include <utility>
+#include <stdexcept>
 
 // --- Import Qt headers ---
 #include <QObject>
-#include <QQueue>
 #include <QVariant>
 #include <QList>
 #include <QSharedPointer>
@@ -25,7 +25,6 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QThread>
-#include <QMutex>
 
 // --- Threading/Multiprocessing API Headers ---
 #ifdef Q_OS_WIN
@@ -42,8 +41,8 @@ using TaskType = int;
 using TaskGroup = int;
 using TaskStopTimeout = int; // ms
 
-// --- Declaring constants with macros ---
-#define DEFAULT_STOP_TIMEOUT 1000
+// --- Declaring constants ---
+inline constexpr TaskStopTimeout kDefaultStopTimeout = 1000;
 
 // --- Templates for checking convertibility ---
 template<typename T>
@@ -118,20 +117,20 @@ public:
     explicit Core(QObject* parent = nullptr);
 
     template <typename R, typename... Args>
-    void registerTask(TaskType taskType, std::function<R(Args...)> taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
+    void registerTask(TaskType taskType, std::function<R(Args...)> taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = kDefaultStopTimeout);
 
     template <typename R, typename... Args>
-    void registerTask(TaskType taskType, R (*taskFunction)(Args...), TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
+    void registerTask(TaskType taskType, R (*taskFunction)(Args...), TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = kDefaultStopTimeout);
 
     template <typename Class, typename R, typename... Args>
-    void registerTask(TaskType taskType, R (Class::*taskMethod)(Args...), Class* taskObj, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
+    void registerTask(TaskType taskType, R (Class::*taskMethod)(Args...), Class* taskObj, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = kDefaultStopTimeout);
 
     template <typename Class, typename R, typename... Args>
-    void registerTask(TaskType taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
+    void registerTask(TaskType taskType, R (Class::*taskMethod)(Args...) const, Class* taskObj, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = kDefaultStopTimeout);
 
     // More generic overload (for lambdas, functors, results of std::bind)
     template <typename F>
-    void registerTask(TaskType taskType, F&& taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
+    void registerTask(TaskType taskType, F&& taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = kDefaultStopTimeout);
 
     bool unregisterTask(TaskType taskType);
 
@@ -139,6 +138,7 @@ public:
     void addTask(TaskType taskType, Args... args);
 
     std::atomic_bool* stopTaskFlag();
+    void cancelTaskById(TaskId id);
     void terminateTaskById(TaskId id);
     void stopTaskById(TaskId id);
     void stopTaskByType(TaskType type);
@@ -201,21 +201,21 @@ private:
     void stopTask(QSharedPointer<Task> pTask);
     void startTask(QSharedPointer<Task> pTask);
     void startQueuedTask();
+    bool ensureCalledFromOwnerThread(const char* method) const;
 
     template <typename... Args>
-    void insertToTaskHash(TaskType taskType, std::function<QVariant(Args...)> taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = DEFAULT_STOP_TIMEOUT);
+    void insertToTaskHash(TaskType taskType, std::function<QVariant(Args...)> taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = kDefaultStopTimeout);
 
     QHash<TaskType, TaskInfo> m_taskHash;
     QList<QSharedPointer<Task>> m_activeTaskList;
     QList<QSharedPointer<Task>> m_queuedTaskList;
     std::atomic_bool m_blockStartTask{false};
-    mutable QMutex m_activeTaskMutex;
 
 signals:
     void finishedTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, QVariant result = QVariant());
     void startedTask(TaskId id, TaskType type, QList<QVariant> argsList = {});
     void terminatedTask(TaskId id, TaskType type, QList<QVariant> argsList = {});
-    void stopTimedOutTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, TaskStopTimeout timeout = DEFAULT_STOP_TIMEOUT);
+    void stopTimedOutTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, TaskStopTimeout timeout = kDefaultStopTimeout);
 };
 
 // --- Class method implementations *after* class declarations ---
@@ -246,8 +246,22 @@ inline void* TaskHelper::functionWrapper(void* pTaskHelper) {
 inline Core::Core(QObject* parent)
     : QObject(parent) {}
 
+inline bool Core::ensureCalledFromOwnerThread(const char* method) const {
+    if (QThread::currentThread() == thread()) {
+        return true;
+    }
+    qWarning() << "Core::" << method
+               << "- called from non-owner thread. owner =" << thread()
+               << ", current =" << QThread::currentThread();
+    return false;
+}
+
 template <typename R, typename... Args>
 void Core::registerTask(TaskType taskType, std::function<R(Args...)> taskFunction, TaskGroup taskGroup, TaskStopTimeout taskStopTimeout) {
+    if (!ensureCalledFromOwnerThread("registerTask")) {
+        throw std::logic_error("Core::registerTask must be called from the owner thread");
+    }
+
     std::function<QVariant(std::remove_reference_t<Args>...)> f;
 
     if constexpr (std::is_void_v<R>) {
@@ -301,6 +315,10 @@ void Core::registerTask(TaskType taskType, F&& taskFunction, TaskGroup taskGroup
 }
 
 inline bool Core::unregisterTask(TaskType taskType) {
+    if (!ensureCalledFromOwnerThread("unregisterTask")) {
+        return false;
+    }
+
     for (const auto& pTask : std::as_const(m_activeTaskList)) {
         if (pTask->m_type == taskType) {
             qWarning() << "Core::unregisterTask - Cannot unregister active task type:" << taskType;
@@ -318,6 +336,10 @@ inline bool Core::unregisterTask(TaskType taskType) {
 
 template <typename... Args>
 void Core::addTask(TaskType taskType, Args... args) {
+    if (!ensureCalledFromOwnerThread("addTask")) {
+        throw std::logic_error("Core::addTask must be called from the owner thread");
+    }
+
     auto taskInfoIt = m_taskHash.constFind(taskType);
     if (taskInfoIt == m_taskHash.cend()) {
         qWarning() << "Core::addTask - Task not registered for type:" << taskType;
@@ -375,28 +397,55 @@ void Core::addTask(TaskType taskType, Args... args) {
 }
 
 inline void Core::terminateTaskById(TaskId id) {
+    if (!ensureCalledFromOwnerThread("terminateTaskById")) {
+        return;
+    }
+
     if (auto pTask = activeTaskById(id); !pTask.isNull()) {
         terminateTask(std::move(pTask));
     }
 }
 
+inline void Core::cancelTaskById(TaskId id) {
+    if (!ensureCalledFromOwnerThread("cancelTaskById")) {
+        return;
+    }
+    stopTaskById(id);
+}
+
 inline void Core::stopTaskById(TaskId id) {
+    if (!ensureCalledFromOwnerThread("stopTaskById")) {
+        return;
+    }
+
     if (auto pTask = activeTaskById(id); !pTask.isNull()) {
         stopTask(std::move(pTask));
     }
 }
 
 inline void Core::stopTaskByType(TaskType type) {
+    if (!ensureCalledFromOwnerThread("stopTaskByType")) {
+        return;
+    }
+
     if (auto pTask = activeTaskByType(type); !pTask.isNull()) {
         stopTask(std::move(pTask));
     }
 }
 
 inline void Core::stopTaskByGroup(TaskGroup group) {
+    if (!ensureCalledFromOwnerThread("stopTaskByGroup")) {
+        return;
+    }
+
     stopTasksByGroup(group, false);
 }
 
 inline void Core::stopTasks() {
+    if (!ensureCalledFromOwnerThread("stopTasks")) {
+        return;
+    }
+
     m_blockStartTask.store(true);
     QTimer* pTimer = new QTimer(this); // with parent for automatic cleanup!
     connect(pTimer, &QTimer::timeout, this, [this, pTimer]() {
@@ -414,7 +463,7 @@ inline void Core::stopTasks() {
         if (taskInfoIt != m_taskHash.cend()) {
             maxTimeout = std::max(maxTimeout, taskInfoIt.value().m_stopTimeout);
         } else {
-            maxTimeout = std::max(maxTimeout, static_cast<TaskStopTimeout>(DEFAULT_STOP_TIMEOUT));
+            maxTimeout = std::max(maxTimeout, static_cast<TaskStopTimeout>(kDefaultStopTimeout));
             qWarning() << "Core::stopTasks - Missing registration for active task type:" << pTask->m_type;
         }
     }
@@ -429,6 +478,10 @@ inline void Core::stopTasks() {
 }
 
 inline void Core::stopAllTasks() {
+    if (!ensureCalledFromOwnerThread("stopAllTasks")) {
+        return;
+    }
+
     // Remove queued tasks immediately (they never started, so no stop timeout needed).
     for (const auto& pQueuedTask : std::as_const(m_queuedTaskList)) {
         emit terminatedTask(pQueuedTask->m_id, pQueuedTask->m_type, pQueuedTask->m_argsList);
@@ -440,6 +493,10 @@ inline void Core::stopAllTasks() {
 }
 
 inline void Core::stopTasksByGroup(TaskGroup group, bool includeQueued) {
+    if (!ensureCalledFromOwnerThread("stopTasksByGroup")) {
+        return;
+    }
+
     QList<QSharedPointer<Task>> activeInGroup;
     for (const auto& pTask : std::as_const(m_activeTaskList)) {
         if (pTask->m_group == group) {
@@ -467,10 +524,19 @@ inline void Core::stopTasksByGroup(TaskGroup group, bool includeQueued) {
 }
 
 [[nodiscard]] inline bool Core::isTaskRegistered(TaskType type) {
+    if (!ensureCalledFromOwnerThread("isTaskRegistered")) {
+        return false;
+    }
+
     return m_taskHash.contains(type);
 }
 
 inline TaskGroup Core::groupByTask(TaskType type, bool* ok) {
+    if (!ensureCalledFromOwnerThread("groupByTask")) {
+        if (ok) *ok = false;
+        return -1;
+    }
+
     auto taskInfoIt = m_taskHash.constFind(type);
     if (taskInfoIt != m_taskHash.cend()) {
         if (ok) *ok = true;
@@ -482,10 +548,19 @@ inline TaskGroup Core::groupByTask(TaskType type, bool* ok) {
 }
 
 [[nodiscard]] inline bool Core::isIdle() {
+    if (!ensureCalledFromOwnerThread("isIdle")) {
+        return false;
+    }
+
     return m_activeTaskList.isEmpty();
 }
 
 [[nodiscard]] inline bool Core::isTaskAddedByType(TaskType type, bool* isActive) {
+    if (!ensureCalledFromOwnerThread("isTaskAddedByType")) {
+        if (isActive) *isActive = false;
+        return false;
+    }
+
     for (const auto& pTask : std::as_const(m_activeTaskList)) {
         if (pTask->m_type == type) {
             if (isActive) *isActive = true;
@@ -502,6 +577,11 @@ inline TaskGroup Core::groupByTask(TaskType type, bool* ok) {
 }
 
 [[nodiscard]] inline bool Core::isTaskAddedByGroup(TaskGroup group, bool* isActive) {
+    if (!ensureCalledFromOwnerThread("isTaskAddedByGroup")) {
+        if (isActive) *isActive = false;
+        return false;
+    }
+
     for (const auto& pTask : std::as_const(m_activeTaskList)) {
         if (pTask->m_group == group) {
             if (isActive) *isActive = true;
@@ -542,7 +622,7 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
     pTask->m_stopFlag.store(true);
 
     // Determine timeout from task's registered stop timeout (verification window).
-    TaskStopTimeout timeout = DEFAULT_STOP_TIMEOUT;
+    TaskStopTimeout timeout = kDefaultStopTimeout;
     auto taskInfoIt = m_taskHash.constFind(pTask->m_type);
     if (taskInfoIt != m_taskHash.cend()) {
         timeout = taskInfoIt.value().m_stopTimeout;
@@ -632,7 +712,7 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
 
 inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
     pTask->m_stopFlag.store(true);
-    TaskStopTimeout timeout = DEFAULT_STOP_TIMEOUT;
+    TaskStopTimeout timeout = kDefaultStopTimeout;
     auto taskInfoIt = m_taskHash.constFind(pTask->m_type);
     if (taskInfoIt != m_taskHash.cend()) {
         timeout = taskInfoIt.value().m_stopTimeout;

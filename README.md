@@ -83,7 +83,7 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 
 **IMPORTANT:** The `Core` class is **not thread-safe** for its public interface methods. To ensure stability:
 
-- **All calls to public methods** (e.g., `registerTask`, `addTask`, `stopTaskById`, `terminateTaskById`, `isTask...`, etc.) **must originate from the same thread** where the `Core` object lives. Typically, this is the **main GUI thread**.
+- **All calls to public methods** (e.g., `registerTask`, `addTask`, `cancelTaskById`, `terminateTaskById`, `isTask...`, etc.) **must originate from the same thread** where the `Core` object lives. Typically, this is the **main GUI thread**.
 - Functions registered via `registerTask` are executed in their own dedicated threads managed by the library.
 - Code running inside a registered task function **should avoid calling public `Core` methods directly**, as this can lead to race conditions and undefined behavior. If a task needs to interact with the `Core`, it should use `QMetaObject::invokeMethod` to send a message to the main thread, which then performs the action safely.
 
@@ -94,7 +94,7 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 - `registerTask`: Registers a function/lambda/functor for later execution by type.
 - `addTask`: Adds a registered task to the execution queue.
 - `unregisterTask`: Removes a task type from registration.
-- `stopTaskById`, `stopTaskByType`, `stopTaskByGroup`, `stopTasks`: Request graceful stop of tasks.
+- `cancelTaskById`, `stopTaskById`, `stopTaskByType`, `stopTaskByGroup`, `stopTasks`: Request graceful (cooperative) stop of tasks.
 - `terminateTaskById`: Requests stop, waits up to timeout, then attempts force-termination if task is still running.
 - `isTaskRegistered`, `isIdle`, `isTaskAddedByType`, `isTaskAddedByGroup`: Query task status.
 - `groupByTask`: Get the group associated with a task type.
@@ -129,7 +129,7 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 
 - **Platform Specifics:** The library uses `CreateThread` on Windows and `pthread_create` (detached) on Unix-like systems for low-level thread management.
 - **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is intended for use *within* the executing task's thread.
-- **Termination Semantics:** `terminateTaskById` first requests cooperative stop, then attempts force-termination after timeout. On timeout without actual stop, `stopTimedOutTask` is emitted; if force-termination succeeds, `terminatedTask` is emitted.
+- **Cancellation vs Termination:** use `cancelTaskById`/`stop...` methods for cooperative stop requests. `terminateTaskById` is a stronger path: it first requests cooperative stop, then attempts force-termination after timeout. On timeout without actual stop, `stopTimedOutTask` is emitted; if force-termination succeeds, `terminatedTask` is emitted.
 - **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
 - **Requirements:** Requires Qt 5.12 or later (tested with Qt 6.10.2) and C++17 support.
 

@@ -60,3 +60,6 @@ example/.qmake.stash
 example/release/ExampleApp.exe
 ARCHITECTURE_RU.md
 IMPROVEMENT_PLAN_RU.md
+tests/build/
+tests/.qtcreator/
+tests/*.user
