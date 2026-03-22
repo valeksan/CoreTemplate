@@ -123,13 +123,14 @@ connect(m_pCore, &Core::finishedTask, this, [](TaskId id, TaskType type, const Q
 5. Когда освобождается слот (либо из‑за завершения предыдущей задачи, либо потому что задача принадлежит другой группе), `Core` запускает следующую подходящую задачу в собственном потоке, используя `CreateThread` (Windows) или `pthread_create` (Unix‑подобные системы).
 6. Связанная с задачей функция выполняется в новом потоке.
 7. Во время выполнения задача может проверять общий флаг остановки, полученный через `Core::stopTaskFlag()`, для плавного завершения.
-8. По завершении (нормальном, остановленном или принудительном) задача испускает сигнал (`finishedTask`, `terminatedTask`) обратно в главный поток, где живёт `Core`.
+8. По завершении (нормальном или остановленном) задача испускает `finishedTask`. Если таймаут остановки истёк, менеджер пытается форсировать завершение: при неудаче испускается `stopTimedOutTask`, при успехе — `terminatedTask`.
 9. `Core` обновляет свои внутренние списки активных и ожидающих задач и приступает к запуску следующей ожидающей задачи, если это применимо.
 
 ## Важные замечания
 
 - **Платформенные особенности:** библиотека использует `CreateThread`/`TerminateThread` на Windows и `pthread_create`/`pthread_cancel` на Unix‑подобных системах для низкоуровневого управления потоками.
 - **Потокобезопасность:** сам объект `Core` предназначен для использования из главного потока (или одного управляющего потока). Его методы для добавления/остановки задач вызываются из главного потока, а сигналы испускаются в контексте главного потока. Доступ к внутреннему флагу остановки (`Core::stopTaskFlag()`) предназначен для использования *внутри* потока выполняющейся задачи.
+- **Отмена vs принудительное завершение:** используйте `cancelTaskById`/`stop...` методы для кооперативной остановки. `terminateTaskById` — более жёсткий путь: сначала запрашивает кооперативную остановку, затем пытается форсировать завершение по таймауту. Если задача не остановилась в таймаут, испускается `stopTimedOutTask`; если форсированное завершение успешно — `terminatedTask`.
 - **Header‑Only:** библиотека полностью реализована в файле `core.h` как inline/header‑only библиотека.
 - **Требования:** требуется Qt 5.12 или новее (тестировалась с Qt 6.10.2) и поддержка C++17.
 
@@ -263,12 +264,3 @@ Task completed - ID: 1 Type: 2 Group: 1 Result: 400
 ## Поддержка проекта
 
 Если вы находите эту библиотеку полезной и хотите поддержать её разработку, воспользуйтесь кнопкой Sponsor. Любая поддержка добровольна и глубоко ценится, но полностью опциональна. Библиотека остаётся бесплатной и открытой.
-
-## Current Implementation Notes (as of March 22, 2026)
-
-- Public `Core` API is single-thread affinity API: call it only from the thread that owns `Core` (typically GUI/main thread).
-- Use `cancelTaskById` / `cancelTaskByType` / `cancelTaskByGroup` / `cancelTasks` / `cancelAllTasks` / `cancelTasksByGroup` (or backward-compatible `stop...` methods) for cooperative cancellation.
-- `terminateTaskById` first requests cooperative stop and then attempts force-termination after timeout.
-- Task cancellation is cooperative: long-running tasks should periodically check `stopTaskFlag()`.
-- On timeout, manager emits `stopTimedOutTask` if worker still runs; if force-termination succeeds, it emits `terminatedTask`.
-- Thread startup backend in current code is `CreateThread` (Windows) and `pthread_create` detached (Unix-like).
