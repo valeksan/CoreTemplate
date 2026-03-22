@@ -161,6 +161,8 @@ private:
     enum class TaskState {
         Inactive,
         Active,
+        StopRequested,
+        StopTimedOut,
         Finished,
         Terminated
     };
@@ -220,6 +222,7 @@ signals:
     void finishedTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, QVariant result = QVariant());
     void startedTask(TaskId id, TaskType type, QList<QVariant> argsList = {});
     void terminatedTask(TaskId id, TaskType type, QList<QVariant> argsList = {});
+    void stopRequestedTask(TaskId id, TaskType type, QList<QVariant> argsList = {});
     void stopTimedOutTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, TaskStopTimeout timeout = kDefaultStopTimeout);
 };
 
@@ -661,6 +664,11 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
     // Set stop flag to request cooperative cancellation
     pTask->m_stopFlag.store(true);
 
+    if (pTask->m_state == TaskState::Active) {
+        pTask->m_state = TaskState::StopRequested;
+        emit stopRequestedTask(pTask->m_id, pTask->m_type, pTask->m_argsList);
+    }
+
     // Determine timeout from task's registered stop timeout (verification window).
     TaskStopTimeout timeout = kDefaultStopTimeout;
     auto taskInfoIt = m_taskHash.constFind(pTask->m_type);
@@ -695,6 +703,7 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
 #endif
 
     if (!terminationRequested) {
+        pTask->m_state = TaskState::StopTimedOut;
         qWarning() << QString("Task %1 terminate request was rejected by platform API").arg(QString::number(pTask->m_id));
         emit stopTimedOutTask(pTask->m_id, pTask->m_type, pTask->m_argsList, timeout);
         return;
@@ -705,7 +714,9 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
     auto checker = QSharedPointer<std::function<void()>>::create();
 
     *checker = [this, pTask, timeout, started, checker]() {
-        if (pTask->m_state != TaskState::Active) {
+        if (pTask->m_state == TaskState::Inactive
+            || pTask->m_state == TaskState::Finished
+            || pTask->m_state == TaskState::Terminated) {
             return; // already finished/terminated by another path
         }
 
@@ -734,6 +745,7 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
         }
 
         if (started->elapsed() >= timeout) {
+            pTask->m_state = TaskState::StopTimedOut;
             qWarning() << QString("Task %1 did not stop after terminate request within timeout (%2 ms)")
                               .arg(QString::number(pTask->m_id)).arg(timeout);
             emit stopTimedOutTask(pTask->m_id, pTask->m_type, pTask->m_argsList, timeout);
@@ -752,6 +764,11 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
 
 inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
     pTask->m_stopFlag.store(true);
+    if (pTask->m_state == TaskState::Active) {
+        pTask->m_state = TaskState::StopRequested;
+        emit stopRequestedTask(pTask->m_id, pTask->m_type, pTask->m_argsList);
+    }
+
     TaskStopTimeout timeout = kDefaultStopTimeout;
     auto taskInfoIt = m_taskHash.constFind(pTask->m_type);
     if (taskInfoIt != m_taskHash.cend()) {
@@ -768,10 +785,14 @@ inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
         case TaskState::Terminated:
             qDebug() << QString("Task %1 was terminated").arg(QString::number(pTask->m_id));
             break;
+        case TaskState::StopTimedOut:
+            qDebug() << QString("Task %1 stop already timed out").arg(QString::number(pTask->m_id));
+            break;
+        case TaskState::StopRequested:
         case TaskState::Active:
             qDebug() << QString("Task %1 was not stopped, terminating").arg(QString::number(pTask->m_id));
             terminateTask(pTask);
-            if (pTask->m_state == TaskState::Active) {
+            if (pTask->m_state == TaskState::Active || pTask->m_state == TaskState::StopRequested) {
                 qDebug() << QString("Task %1 terminate request is in progress")
                                 .arg(QString::number(pTask->m_id));
             }

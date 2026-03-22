@@ -6,6 +6,10 @@
 #include <QMenu>
 #include <QListWidgetItem>
 #include <QTimer>
+#include <QToolButton>
+#include <QSplitter>
+#include <QVector>
+#include <QSet>
 
 // --- Examples of functions/structures to demonstrate the capabilities of CoreTaskManager ---
 
@@ -55,6 +59,121 @@ MainWindow::MainWindow(QWidget *parent)
     constexpr int RoleTaskType = Qt::UserRole + 2;
     constexpr int RoleTaskGroup = Qt::UserRole + 3;
 
+    enum class LogKind {
+        Started,
+        Finished,
+        StopRequested,
+        StopTimedOut,
+        Terminated,
+        Info
+    };
+
+    struct LogEntry {
+        LogKind kind;
+        QString text;
+    };
+
+    auto logColor = [](LogKind kind) -> QString {
+        switch (kind) {
+        case LogKind::Started: return "#2e7d32";
+        case LogKind::Finished: return "#1565c0";
+        case LogKind::StopRequested: return "#ef6c00";
+        case LogKind::StopTimedOut: return "#c62828";
+        case LogKind::Terminated: return "#6a1b9a";
+        case LogKind::Info: return "#37474f";
+        }
+        return "#37474f";
+    };
+
+    auto logTag = [](LogKind kind) -> QString {
+        switch (kind) {
+        case LogKind::Started: return "STARTED";
+        case LogKind::Finished: return "FINISHED";
+        case LogKind::StopRequested: return "STOP REQUESTED";
+        case LogKind::StopTimedOut: return "STOP TIMED OUT";
+        case LogKind::Terminated: return "TERMINATED";
+        case LogKind::Info: return "INFO";
+        }
+        return "INFO";
+    };
+
+    auto* pLogEntries = new QVector<LogEntry>();
+    auto* pVisibleKinds = new QSet<LogKind>({
+        LogKind::Started,
+        LogKind::Finished,
+        LogKind::StopRequested,
+        LogKind::StopTimedOut,
+        LogKind::Terminated,
+        LogKind::Info
+    });
+
+    auto rebuildLog = [this, pLogEntries, pVisibleKinds, logColor, logTag]() {
+        ui->textEdit->clear();
+        for (const auto& entry : std::as_const(*pLogEntries)) {
+            if (!pVisibleKinds->contains(entry.kind)) {
+                continue;
+            }
+            const QString html = QString("<span style=\"color:%1;\"><b>[%2]</b> %3</span>")
+                                     .arg(logColor(entry.kind),
+                                          logTag(entry.kind),
+                                          entry.text.toHtmlEscaped());
+            ui->textEdit->append(html);
+        }
+    };
+
+    auto addLog = [this, pLogEntries, pVisibleKinds, logColor, logTag](LogKind kind, const QString& text) {
+        pLogEntries->append(LogEntry{kind, text});
+        if (!pVisibleKinds->contains(kind)) {
+            return;
+        }
+        const QString html = QString("<span style=\"color:%1;\"><b>[%2]</b> %3</span>")
+                                 .arg(logColor(kind),
+                                      logTag(kind),
+                                      text.toHtmlEscaped());
+        ui->textEdit->append(html);
+    };
+
+    auto* pLogFilterButton = findChild<QToolButton*>("toolButtonLogFilter");
+    if (!pLogFilterButton) {
+        pLogFilterButton = new QToolButton(ui->centralWidget);
+        pLogFilterButton->setText("Log Filter...");
+    }
+    pLogFilterButton->setPopupMode(QToolButton::InstantPopup);
+
+    auto* pLogMenu = new QMenu(pLogFilterButton);
+    auto makeFilterAction = [pLogMenu, pVisibleKinds, rebuildLog](const QString& title, LogKind kind) {
+        QAction* pAction = pLogMenu->addAction(title);
+        pAction->setCheckable(true);
+        pAction->setChecked(true);
+        QObject::connect(pAction, &QAction::toggled, pLogMenu, [pVisibleKinds, rebuildLog, kind](bool checked) {
+            if (checked) {
+                pVisibleKinds->insert(kind);
+            } else {
+                pVisibleKinds->remove(kind);
+            }
+            rebuildLog();
+        });
+    };
+
+    makeFilterAction("Started", LogKind::Started);
+    makeFilterAction("Finished", LogKind::Finished);
+    makeFilterAction("Stop Requested", LogKind::StopRequested);
+    makeFilterAction("Stop Timed Out", LogKind::StopTimedOut);
+    makeFilterAction("Terminated", LogKind::Terminated);
+    makeFilterAction("Info", LogKind::Info);
+    pLogMenu->addSeparator();
+    pLogMenu->addAction("Clear Log", [this, pLogEntries]() {
+        pLogEntries->clear();
+        ui->textEdit->clear();
+    });
+    pLogFilterButton->setMenu(pLogMenu);
+
+    if (auto* pMainSplitter = findChild<QSplitter*>("splitterMainPanels")) {
+        pMainSplitter->setStretchFactor(0, 2);
+        pMainSplitter->setStretchFactor(1, 3);
+        pMainSplitter->setSizes({240, 320});
+    }
+
     auto removeTaskItemById = [this, RoleTaskId](TaskId taskId) {
         for (int i = 0; i < ui->listWidget->count(); ++i) {
             QListWidgetItem* item = ui->listWidget->item(i);
@@ -93,13 +212,13 @@ MainWindow::MainWindow(QWidget *parent)
         });
         contextMenu->addSeparator();
         contextMenu->addAction("Cancel By Type", [this, taskType]() {
-            m_pCore->stopTaskByType(taskType);
+            m_pCore->cancelTaskByType(taskType);
         });
         contextMenu->addAction("Cancel Group (Active)", [this, taskGroup]() {
-            m_pCore->stopTasksByGroup(taskGroup, false);
+            m_pCore->cancelTasksByGroup(taskGroup, false);
         });
         contextMenu->addAction("Cancel Group (All)", [this, taskGroup]() {
-            m_pCore->stopTasksByGroup(taskGroup, true);
+            m_pCore->cancelTasksByGroup(taskGroup, true);
         });
 
         contextMenu->exec(ui->listWidget->viewport()->mapToGlobal(pos));
@@ -190,14 +309,14 @@ MainWindow::MainWindow(QWidget *parent)
     // --- Signal processing from Core ---
 
     // Task start signal
-    connect(m_pCore, &Core::startedTask, this, [this, RoleTaskId, RoleTaskType, RoleTaskGroup](TaskId id, TaskType type, const QVariantList& argsList) {
+    connect(m_pCore, &Core::startedTask, this, [this, RoleTaskId, RoleTaskType, RoleTaskGroup, addLog](TaskId id, TaskType type, const QVariantList& argsList) {
         Q_UNUSED(argsList);
         const TaskGroup group = m_pCore->groupByTask(type);
         QString info = QString("ID: %1, Type: %2, Group: %3")
                            .arg(id)
                            .arg(type)
                            .arg(group);
-        ui->textEdit->append(QString("Task (%1) started.").arg(info));
+        addLog(LogKind::Started, QString("Task (%1) started.").arg(info));
         auto* item = new QListWidgetItem(info);
         item->setData(RoleTaskId, static_cast<qlonglong>(id));
         item->setData(RoleTaskType, type);
@@ -206,10 +325,10 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     // Task completion signal
-    connect(m_pCore, &Core::finishedTask, this, [this, removeTaskItemById](TaskId id, TaskType type, const QVariantList& argsList, const QVariant& result) {
+    connect(m_pCore, &Core::finishedTask, this, [this, removeTaskItemById, addLog](TaskId id, TaskType type, const QVariantList& argsList, const QVariant& result) {
         Q_UNUSED(argsList);
         QString info = QString("ID: %1, Type: %2").arg(id).arg(type);
-        ui->textEdit->append(QString("Task (%1) finished.").arg(info));
+        addLog(LogKind::Finished, QString("Task (%1) finished.").arg(info));
 
         // Result processing depending on the type of task
         switch (type) {
@@ -244,18 +363,25 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     // A signal about the forced completion of a task
-    connect(m_pCore, &Core::terminatedTask, this, [this, removeTaskItemById](TaskId id, TaskType type, const QVariantList& argsList) {
+    connect(m_pCore, &Core::terminatedTask, this, [this, removeTaskItemById, addLog](TaskId id, TaskType type, const QVariantList& argsList) {
         Q_UNUSED(argsList);
         QString info = QString("ID: %1, Type: %2").arg(id).arg(type);
-        ui->textEdit->append(QString("Task (%1) was TERMINATED.").arg(info));
+        addLog(LogKind::Terminated, QString("Task (%1) was TERMINATED.").arg(info));
         removeTaskItemById(id);
     });
 
-    // A signal that task did not stop within timeout
-    connect(m_pCore, &Core::stopTimedOutTask, this, [this](TaskId id, TaskType type, const QVariantList& argsList, TaskStopTimeout timeout) {
+    // A signal that cooperative stop was requested for the task
+    connect(m_pCore, &Core::stopRequestedTask, this, [this, addLog](TaskId id, TaskType type, const QVariantList& argsList) {
         Q_UNUSED(argsList);
         QString info = QString("ID: %1, Type: %2").arg(id).arg(type);
-        ui->textEdit->append(QString("Task (%1) STOP TIMED OUT after %2 ms.").arg(info).arg(timeout));
+        addLog(LogKind::StopRequested, QString("Task (%1) STOP REQUESTED.").arg(info));
+    });
+
+    // A signal that task did not stop within timeout
+    connect(m_pCore, &Core::stopTimedOutTask, this, [this, addLog](TaskId id, TaskType type, const QVariantList& argsList, TaskStopTimeout timeout) {
+        Q_UNUSED(argsList);
+        QString info = QString("ID: %1, Type: %2").arg(id).arg(type);
+        addLog(LogKind::StopTimedOut, QString("Task (%1) STOP TIMED OUT after %2 ms.").arg(info).arg(timeout));
     });
 
     // --- Connecting UI buttons ---
@@ -286,7 +412,7 @@ MainWindow::MainWindow(QWidget *parent)
         bool ok;
         int type = ui->lineEditStopTaskType->text().toInt(&ok);
         if (ok) {
-            m_pCore->stopTaskByType(type);
+            m_pCore->cancelTaskByType(type);
         } else {
             qDebug() << "Invalid Task Type entered.";
         }
@@ -296,7 +422,7 @@ MainWindow::MainWindow(QWidget *parent)
         bool ok;
         int group = ui->lineEditStopTaskGroup->text().toInt(&ok);
         if (ok) {
-            m_pCore->stopTasksByGroup(group, true); // Cancel by group including queued tasks
+            m_pCore->cancelTasksByGroup(group, true); // Cancel by group including queued tasks
         } else {
             qDebug() << "Invalid Task Group entered.";
         }
@@ -316,12 +442,12 @@ MainWindow::MainWindow(QWidget *parent)
         }
 
         if (pSelected == pStopActive) {
-            m_pCore->stopTasks();
+            m_pCore->cancelTasks();
             return;
         }
 
         if (pSelected == pStopAll) {
-            m_pCore->stopAllTasks();
+            m_pCore->cancelAllTasks();
             return;
         }
 
@@ -333,9 +459,9 @@ MainWindow::MainWindow(QWidget *parent)
         }
 
         if (pSelected == pStopGroupActive) {
-            m_pCore->stopTasksByGroup(group, false);
+            m_pCore->cancelTasksByGroup(group, false);
         } else if (pSelected == pStopGroupAll) {
-            m_pCore->stopTasksByGroup(group, true);
+            m_pCore->cancelTasksByGroup(group, true);
         }
     });
 

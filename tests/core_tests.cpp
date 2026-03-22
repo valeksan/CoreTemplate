@@ -16,6 +16,7 @@ private slots:
     void stopAllTasksStopsQueuedAndActive();
     void stopTasksByGroupWithQueuedOnlyAffectsSelectedGroup();
     void cancelTasksByGroupAliasWorks();
+    void cancelAllTasksAliasWorks();
     void unregisterTaskFailsForActiveAndQueued();
 };
 
@@ -290,6 +291,33 @@ void CoreTests::cancelTasksByGroupAliasWorks() {
     QVERIFY(queuedCancelled);
 }
 
+
+void CoreTests::cancelAllTasksAliasWorks() {
+    Core core;
+
+    core.registerTask(47, [&core](int tag) -> int {
+        for (int i = 0; i < 500; ++i) {
+            if (auto* stop = core.stopTaskFlag(); stop && stop->load()) {
+                return -tag;
+            }
+            QThread::msleep(2);
+        }
+        return tag;
+    }, 10, 150);
+
+    QSignalSpy finishedSpy(&core, &Core::finishedTask);
+    QSignalSpy terminatedSpy(&core, &Core::terminatedTask);
+    QVERIFY(finishedSpy.isValid());
+    QVERIFY(terminatedSpy.isValid());
+
+    core.addTask(47, 1);
+    core.addTask(47, 2); // queued in same group
+    QTest::qWait(20);
+    core.cancelAllTasks();
+
+    QTRY_VERIFY_WITH_TIMEOUT(finishedSpy.count() >= 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(terminatedSpy.count() >= 1, 5000);
+}
 void CoreTests::unregisterTaskFailsForActiveAndQueued() {
     Core core;
 
@@ -340,3 +368,8 @@ void CoreTests::unregisterTaskFailsForActiveAndQueued() {
 
 QTEST_MAIN(CoreTests)
 #include "core_tests.moc"
+
+
+
+
+
