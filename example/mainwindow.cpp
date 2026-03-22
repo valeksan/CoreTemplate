@@ -85,20 +85,20 @@ MainWindow::MainWindow(QWidget *parent)
         QMenu *contextMenu = new QMenu(this); // The parent of this is for automatic cleaning
         contextMenu->setAttribute(Qt::WA_DeleteOnClose);
 
-        contextMenu->addAction("Stop This Task", [this, taskId]() {
-            m_pCore->stopTaskById(taskId);
+        contextMenu->addAction("Cancel This Task", [this, taskId]() {
+            m_pCore->cancelTaskById(taskId);
         });
         contextMenu->addAction("Terminate This Task", [this, taskId]() {
             m_pCore->terminateTaskById(taskId);
         });
         contextMenu->addSeparator();
-        contextMenu->addAction("Stop By Type", [this, taskType]() {
+        contextMenu->addAction("Cancel By Type", [this, taskType]() {
             m_pCore->stopTaskByType(taskType);
         });
-        contextMenu->addAction("Stop Group (Active)", [this, taskGroup]() {
+        contextMenu->addAction("Cancel Group (Active)", [this, taskGroup]() {
             m_pCore->stopTasksByGroup(taskGroup, false);
         });
-        contextMenu->addAction("Stop Group (All)", [this, taskGroup]() {
+        contextMenu->addAction("Cancel Group (All)", [this, taskGroup]() {
             m_pCore->stopTasksByGroup(taskGroup, true);
         });
 
@@ -276,7 +276,7 @@ MainWindow::MainWindow(QWidget *parent)
         bool ok;
         long id = ui->lineEditStopTaskId->text().toLong(&ok);
         if (ok) {
-            m_pCore->stopTaskById(id);
+            m_pCore->cancelTaskById(id);
         } else {
             qDebug() << "Invalid Task ID entered.";
         }
@@ -296,7 +296,7 @@ MainWindow::MainWindow(QWidget *parent)
         bool ok;
         int group = ui->lineEditStopTaskGroup->text().toInt(&ok);
         if (ok) {
-            m_pCore->stopTasksByGroup(group, true); // Stop by group including queued tasks
+            m_pCore->stopTasksByGroup(group, true); // Cancel by group including queued tasks
         } else {
             qDebug() << "Invalid Task Group entered.";
         }
@@ -304,11 +304,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->pushButtonStopTasks, &QPushButton::clicked, this, [this]() {
         QMenu menu(this);
-        QAction* pStopActive = menu.addAction("Stop Active Tasks");
-        QAction* pStopAll = menu.addAction("Stop ALL Tasks (Active + Queued)");
+        QAction* pStopActive = menu.addAction("Cancel Active Tasks");
+        QAction* pStopAll = menu.addAction("Cancel ALL Tasks (Active + Queued)");
         menu.addSeparator();
-        QAction* pStopGroupActive = menu.addAction("Stop Active Tasks By Group");
-        QAction* pStopGroupAll = menu.addAction("Stop ALL Tasks By Group (Active + Queued)");
+        QAction* pStopGroupActive = menu.addAction("Cancel Active Tasks By Group");
+        QAction* pStopGroupAll = menu.addAction("Cancel ALL Tasks By Group (Active + Queued)");
 
         QAction* pSelected = menu.exec(ui->pushButtonStopTasks->mapToGlobal(QPoint(0, ui->pushButtonStopTasks->height())));
         if (!pSelected) {

@@ -37,7 +37,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>StopTaskById</string>
+     <string>CancelTaskById</string>
     </property>
    </widget>
    <widget class="QTextEdit" name="textEdit">
@@ -141,10 +141,10 @@
      </rect>
     </property>
     <property name="toolTip">
-     <string>Select stop mode: active only, all (active + queued), or by group.</string>
+     <string>Select cancel mode: active only, all (active + queued), or by group.</string>
     </property>
     <property name="text">
-     <string>Stop Tasks...</string>
+     <string>Cancel Tasks...</string>
     </property>
    </widget>
    <widget class="QLineEdit" name="lineEditStopTaskType">
@@ -173,7 +173,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>StopTaskByType</string>
+     <string>CancelTaskByType</string>
     </property>
    </widget>
    <widget class="QLineEdit" name="lineEditStopTaskGroup">
@@ -202,10 +202,10 @@
      </rect>
     </property>
     <property name="toolTip">
-     <string>Stops all tasks in the specified group, including queued tasks.</string>
+     <string>Cancels all tasks in the specified group, including queued tasks.</string>
     </property>
     <property name="text">
-     <string>Stop Group (All)</string>
+     <string>Cancel Group (All)</string>
     </property>
    </widget>
   </widget>
