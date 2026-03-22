@@ -40,6 +40,10 @@ using TaskType = int;
 using TaskGroup = int;
 using TaskStopTimeout = int; // ms
 
+namespace core_detail {
+inline thread_local std::atomic_bool* g_currentStopFlag = nullptr;
+}
+
 // --- Declaring constants ---
 inline constexpr TaskStopTimeout kDefaultStopTimeout = 1000;
 
@@ -86,7 +90,7 @@ class TaskHelper final : public QObject {
     Q_OBJECT
 
 public:
-    explicit TaskHelper(std::function<QVariant()> function, QObject* parent = nullptr);
+    explicit TaskHelper(std::function<QVariant()> function, std::atomic_bool* pStopFlag, QObject* parent = nullptr);
 
 #ifdef Q_OS_WIN
     static DWORD WINAPI functionWrapper(void* pTaskHelper);
@@ -96,6 +100,7 @@ public:
 
 private:
     std::function<QVariant()> m_function;
+    std::atomic_bool* m_pStopFlag = nullptr;
     void execute(); // Method declaration
 
 signals:
@@ -228,11 +233,20 @@ signals:
 // --- Class method implementations *after* class declarations ---
 
 // TaskHelper Implementation
-inline TaskHelper::TaskHelper(std::function<QVariant()> function, QObject* parent)
-    : QObject(parent), m_function(function) {}
+inline TaskHelper::TaskHelper(std::function<QVariant()> function, std::atomic_bool* pStopFlag, QObject* parent)
+    : QObject(parent), m_function(function), m_pStopFlag(pStopFlag) {}
 
 inline void TaskHelper::execute() {
-    emit finished(m_function());
+    core_detail::g_currentStopFlag = m_pStopFlag;
+    QVariant result;
+    try {
+        result = m_function();
+    } catch (...) {
+        core_detail::g_currentStopFlag = nullptr;
+        throw;
+    }
+    core_detail::g_currentStopFlag = nullptr;
+    emit finished(result);
 }
 
 #ifdef Q_OS_WIN
@@ -389,18 +403,7 @@ void Core::addTask(TaskType taskType, Args... args) {
 }
 
 [[nodiscard]] inline std::atomic_bool* Core::stopTaskFlag() {
-    auto it = std::find_if(m_activeTaskList.begin(), m_activeTaskList.end(), [](const auto& task) {
-        #ifdef Q_OS_WIN
-        return task->m_threadId == GetCurrentThreadId();
-        #else
-        return pthread_equal(pthread_self(), task->m_threadHandle);
-        #endif
-    });
-
-    if (it != m_activeTaskList.end()) {
-        return &(*it)->m_stopFlag;
-    }
-    return nullptr;
+    return core_detail::g_currentStopFlag;
 }
 
 inline void Core::terminateTaskById(TaskId id) {
@@ -811,7 +814,7 @@ inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
 inline void Core::startTask(QSharedPointer<Core::Task> pTask) {
     m_activeTaskList.append(pTask);
     pTask->m_state = TaskState::Active;
-    TaskHelper* pTaskHelper = new TaskHelper(pTask->m_functionBound, this); // Add with parent!
+    TaskHelper* pTaskHelper = new TaskHelper(pTask->m_functionBound, &pTask->m_stopFlag, this); // Add with parent!
 
     connect(pTaskHelper, &TaskHelper::finished, this, [this, pTask, pTaskHelper](QVariant result) {
         pTask->m_state = TaskState::Finished;
@@ -876,7 +879,15 @@ void Core::insertToTaskHash(TaskType taskType, std::function<QVariant(Args...)> 
         qWarning() << "Core::registerTask - Task type is already registered:" << taskType;
         throw std::logic_error("Task type is already registered");
     }
-    m_taskHash.insert(taskType, TaskInfo{taskFunction, taskGroup, taskStopTimeout});
+
+    TaskStopTimeout normalizedStopTimeout = taskStopTimeout;
+    if (normalizedStopTimeout < 0) {
+        qWarning() << "Core::registerTask - Negative stop timeout for task type:"
+                   << taskType << ". Using default:" << kDefaultStopTimeout;
+        normalizedStopTimeout = kDefaultStopTimeout;
+    }
+
+    m_taskHash.insert(taskType, TaskInfo{taskFunction, taskGroup, normalizedStopTimeout});
 }
 
 #endif // CORE_H

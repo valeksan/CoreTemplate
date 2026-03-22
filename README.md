@@ -98,7 +98,7 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 - `terminateTaskById`: Requests stop, waits up to timeout, then attempts force-termination if task is still running.
 - `isTaskRegistered`, `isIdle`, `isTaskAddedByType`, `isTaskAddedByGroup`: Query task status.
 - `groupByTask`: Get the group associated with a task type.
-- `stopTaskFlag`: Get a flag for the current thread to allow cooperative stopping within a task function.
+- `stopTaskFlag`: Returns a thread-local flag pointer for the currently executing task thread; use it inside task code for cooperative stopping.
 
 ## 🧵 Threading Model
 
@@ -121,14 +121,14 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 4. The `Core` manages a queue and ensures only one task per group runs at a time.
 5. When a slot opens up (either due to a previous task finishing or because the task belongs to a different group), the `Core` starts the next eligible task in its own thread using `CreateThread` (Windows) or `pthread_create` (Unix-like systems).
 6. The task's associated function executes within the new thread.
-7. While executing, a task can check a shared stop flag retrieved via `Core::stopTaskFlag()` to perform graceful shutdowns.
+7. While executing, a task can check a thread-local stop flag retrieved via `Core::stopTaskFlag()` to perform graceful shutdowns.
 8. Upon completion (normal or stopped), the task emits `finishedTask`. If stop timeout expires, manager attempts force-termination; on failure it emits `stopTimedOutTask`, on success it emits `terminatedTask`.
 9. The `Core` updates its internal lists of active and queued tasks and proceeds to start the next queued task if applicable.
 
 ## 📌 Important Notes
 
 - **Platform Specifics:** The library uses `CreateThread` on Windows and `pthread_create` (detached) on Unix-like systems for low-level thread management.
-- **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is intended for use *within* the executing task's thread.
+- **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is thread-local and intended for use *within* the executing task's thread.
 - **Cancellation vs Termination:** use `cancelTaskById`/`stop...` methods for cooperative stop requests. `terminateTaskById` is a stronger path: it first requests cooperative stop, then attempts force-termination after timeout. On timeout without actual stop, `stopTimedOutTask` is emitted; if force-termination succeeds, `terminatedTask` is emitted.
 - **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
 - **Requirements:** Requires Qt 5.12 or later (tested with Qt 6.10.2) and C++17 support.
