@@ -51,7 +51,7 @@ struct MultiplyFunctor {
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
-    , m_pCore(new Core()) // Passing the parent for automatic cleaning
+    , m_pCore(new Core(this))
 {
     ui->setupUi(this);
 

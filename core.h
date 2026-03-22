@@ -29,7 +29,6 @@
 // --- Threading/Multiprocessing API Headers ---
 #ifdef Q_OS_WIN
     #include <windows.h>
-    #include <process.h>
 #else
     #include <pthread.h>
     #include <signal.h>
@@ -489,11 +488,16 @@ inline void Core::stopTasks() {
         return;
     }
 
+    if (m_activeTaskList.isEmpty()) {
+        return;
+    }
+
     m_blockStartTask.store(true);
     QTimer* pTimer = new QTimer(this); // with parent for automatic cleanup!
     connect(pTimer, &QTimer::timeout, this, [this, pTimer]() {
         if (isIdle()) { // Use the public method
             m_blockStartTask.store(false);
+            startQueuedTask();
             pTimer->stop();
             pTimer->deleteLater();
         }
@@ -847,6 +851,10 @@ inline void Core::startTask(QSharedPointer<Core::Task> pTask) {
 }
 
 inline void Core::startQueuedTask() {
+    if (m_blockStartTask.load()) {
+        return;
+    }
+
     for (auto it = m_queuedTaskList.begin(); it != m_queuedTaskList.end();) {
         QSharedPointer<Task> pQueuedTask = *it;
         bool canStart = std::none_of(std::as_const(m_activeTaskList).begin(), std::as_const(m_activeTaskList).end(),
