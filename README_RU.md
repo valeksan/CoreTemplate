@@ -262,3 +262,11 @@ Task completed - ID: 1 Type: 2 Group: 1 Result: 400
 ## Поддержка проекта
 
 Если вы находите эту библиотеку полезной и хотите поддержать её разработку, воспользуйтесь кнопкой Sponsor. Любая поддержка добровольна и глубоко ценится, но полностью опциональна. Библиотека остаётся бесплатной и открытой.
+
+## Current Implementation Notes (as of March 22, 2026)
+
+- Public `Core` API is single-thread affinity API: call it only from the thread that owns `Core` (typically GUI/main thread).
+- `terminateTaskById` first requests cooperative stop and then attempts force-termination after timeout.
+- Task cancellation is cooperative: long-running tasks should periodically check `stopTaskFlag()`.
+- On timeout, manager emits `stopTimedOutTask` if worker still runs; if force-termination succeeds, it emits `terminatedTask`.
+- Thread startup backend in current code is `CreateThread` (Windows) and `pthread_create` detached (Unix-like).

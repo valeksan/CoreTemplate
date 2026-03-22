@@ -95,7 +95,7 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 - `addTask`: Adds a registered task to the execution queue.
 - `unregisterTask`: Removes a task type from registration.
 - `stopTaskById`, `stopTaskByType`, `stopTaskByGroup`, `stopTasks`: Request graceful stop of tasks.
-- `terminateTaskById`: Forcefully terminates a task by ID.
+- `terminateTaskById`: Requests stop, waits up to timeout, then attempts force-termination if task is still running.
 - `isTaskRegistered`, `isIdle`, `isTaskAddedByType`, `isTaskAddedByGroup`: Query task status.
 - `groupByTask`: Get the group associated with a task type.
 - `stopTaskFlag`: Get a flag for the current thread to allow cooperative stopping within a task function.
@@ -111,6 +111,7 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 - Adhering to the single-threaded access rule for the public Core Interface is crucial.
 - Be cautious with `QTimer::singleShot` and `connect` callbacks if they access shared data outside of `Core`'s internal structures, especially if those accesses are not synchronized or atomic.
 - The `Core` class uses Qt types (`QList`, `QHash`, `QSharedPointer`) which manage their own lifetimes. However, the concurrent access to these types from different threads is avoided by the usage rules.
+- Cancellation is cooperative. A task should periodically check `stopTaskFlag()` and exit on request.
 
 ## ⚙️ How It Works
 
@@ -121,13 +122,14 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 5. When a slot opens up (either due to a previous task finishing or because the task belongs to a different group), the `Core` starts the next eligible task in its own thread using `CreateThread` (Windows) or `pthread_create` (Unix-like systems).
 6. The task's associated function executes within the new thread.
 7. While executing, a task can check a shared stop flag retrieved via `Core::stopTaskFlag()` to perform graceful shutdowns.
-8. Upon completion (normal, stopped, or terminated), the task emits a signal (`finishedTask`, `terminatedTask`) back to the main thread where the `Core` lives.
+8. Upon completion (normal or stopped), the task emits `finishedTask`. If stop timeout expires, manager attempts force-termination; on failure it emits `stopTimedOutTask`, on success it emits `terminatedTask`.
 9. The `Core` updates its internal lists of active and queued tasks and proceeds to start the next queued task if applicable.
 
 ## 📌 Important Notes
 
-- **Platform Specifics:** The library uses `CreateThread`/`TerminateThread` on Windows and `pthread_create`/`pthread_cancel` on Unix-like systems for low-level thread management.
+- **Platform Specifics:** The library uses `CreateThread` on Windows and `pthread_create` (detached) on Unix-like systems for low-level thread management.
 - **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is intended for use *within* the executing task's thread.
+- **Termination Semantics:** `terminateTaskById` first requests cooperative stop, then attempts force-termination after timeout. On timeout without actual stop, `stopTimedOutTask` is emitted; if force-termination succeeds, `terminatedTask` is emitted.
 - **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
 - **Requirements:** Requires Qt 5.12 or later (tested with Qt 6.10.2) and C++17 support.
 

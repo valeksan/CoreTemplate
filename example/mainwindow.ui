@@ -49,6 +49,9 @@
       <height>161</height>
      </rect>
     </property>
+    <property name="readOnly">
+     <bool>true</bool>
+    </property>
    </widget>
    <widget class="QLineEdit" name="lineEditStopTaskId">
     <property name="geometry">
@@ -63,7 +66,7 @@
      <string>0</string>
     </property>
     <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
     </property>
    </widget>
    <widget class="QPushButton" name="pushButtonAddTask1">
@@ -137,8 +140,11 @@
       <height>25</height>
      </rect>
     </property>
+    <property name="toolTip">
+     <string>Select stop mode: active only, all (active + queued), or by group.</string>
+    </property>
     <property name="text">
-     <string>StopTasks</string>
+     <string>Stop Tasks...</string>
     </property>
    </widget>
    <widget class="QLineEdit" name="lineEditStopTaskType">
@@ -154,7 +160,7 @@
      <string>0</string>
     </property>
     <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
     </property>
    </widget>
    <widget class="QPushButton" name="pushButtonStopTaskByType">
@@ -183,7 +189,7 @@
      <string>0</string>
     </property>
     <property name="alignment">
-     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
     </property>
    </widget>
    <widget class="QPushButton" name="pushButtonStopTaskByGroup">
@@ -195,8 +201,11 @@
       <height>25</height>
      </rect>
     </property>
+    <property name="toolTip">
+     <string>Stops all tasks in the specified group, including queued tasks.</string>
+    </property>
     <property name="text">
-     <string>StopTaskByGroup</string>
+     <string>Stop Group (All)</string>
     </property>
    </widget>
   </widget>

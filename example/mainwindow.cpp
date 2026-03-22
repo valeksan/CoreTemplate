@@ -51,6 +51,23 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    constexpr int RoleTaskId = Qt::UserRole + 1;
+    constexpr int RoleTaskType = Qt::UserRole + 2;
+    constexpr int RoleTaskGroup = Qt::UserRole + 3;
+
+    auto removeTaskItemById = [this, RoleTaskId](TaskId taskId) {
+        for (int i = 0; i < ui->listWidget->count(); ++i) {
+            QListWidgetItem* item = ui->listWidget->item(i);
+            if (!item) {
+                continue;
+            }
+            if (item->data(RoleTaskId).toLongLong() == taskId) {
+                delete ui->listWidget->takeItem(i);
+                return;
+            }
+        }
+    };
+
     // Hiding the menu and toolbar for simplicity of the example
     ui->menuBar->setHidden(true);
     ui->mainToolBar->setHidden(true);
@@ -61,30 +78,31 @@ MainWindow::MainWindow(QWidget *parent)
         QListWidgetItem *item = ui->listWidget->itemAt(pos);
         if(!item) return;
 
-        QStringList parts = item->text().split(' ');
-        if (parts.size() < 2) return; // Checking that the string contains the ID!
+        const auto taskId = static_cast<TaskId>(item->data(RoleTaskId).toLongLong());
+        const auto taskType = static_cast<TaskType>(item->data(RoleTaskType).toInt());
+        const auto taskGroup = static_cast<TaskGroup>(item->data(RoleTaskGroup).toInt());
 
-        bool ok;
-        long taskId = parts[1].toLong(&ok);
-        if (!ok) return; // Checking that the ID is the correct number!
+        QMenu *contextMenu = new QMenu(this); // The parent of this is for automatic cleaning
+        contextMenu->setAttribute(Qt::WA_DeleteOnClose);
 
-        if(item)
-        {
-            QMenu *contextMenu = new QMenu(this); // The parent of this is for automatic cleaning
-            contextMenu->setAttribute(Qt::WA_DeleteOnClose);
+        contextMenu->addAction("Stop This Task", [this, taskId]() {
+            m_pCore->stopTaskById(taskId);
+        });
+        contextMenu->addAction("Terminate This Task", [this, taskId]() {
+            m_pCore->terminateTaskById(taskId);
+        });
+        contextMenu->addSeparator();
+        contextMenu->addAction("Stop By Type", [this, taskType]() {
+            m_pCore->stopTaskByType(taskType);
+        });
+        contextMenu->addAction("Stop Group (Active)", [this, taskGroup]() {
+            m_pCore->stopTasksByGroup(taskGroup, false);
+        });
+        contextMenu->addAction("Stop Group (All)", [this, taskGroup]() {
+            m_pCore->stopTasksByGroup(taskGroup, true);
+        });
 
-            // Action to request a task stop
-            contextMenu->addAction("Stop Task", [this, taskId]() {
-                m_pCore->stopTaskById(taskId);
-            });
-
-            // Action to force completion of a task (terminate)
-            contextMenu->addAction("Terminate Task", [this, taskId]() {
-                m_pCore->terminateTaskById(taskId);
-            });
-
-            contextMenu->exec(ui->listWidget->viewport()->mapToGlobal(pos));
-        }
+        contextMenu->exec(ui->listWidget->viewport()->mapToGlobal(pos));
     });
 
     // --- Configuring validators for input fields ---
@@ -172,18 +190,23 @@ MainWindow::MainWindow(QWidget *parent)
     // --- Signal processing from Core ---
 
     // Task start signal
-    connect(m_pCore, &Core::startedTask, this, [this](TaskId id, TaskType type, const QVariantList& argsList) {
+    connect(m_pCore, &Core::startedTask, this, [this, RoleTaskId, RoleTaskType, RoleTaskGroup](TaskId id, TaskType type, const QVariantList& argsList) {
         Q_UNUSED(argsList);
+        const TaskGroup group = m_pCore->groupByTask(type);
         QString info = QString("ID: %1, Type: %2, Group: %3")
                            .arg(id)
                            .arg(type)
-                           .arg(m_pCore->groupByTask(type));
+                           .arg(group);
         ui->textEdit->append(QString("Task (%1) started.").arg(info));
-        ui->listWidget->addItem(info);
+        auto* item = new QListWidgetItem(info);
+        item->setData(RoleTaskId, static_cast<qlonglong>(id));
+        item->setData(RoleTaskType, type);
+        item->setData(RoleTaskGroup, group);
+        ui->listWidget->addItem(item);
     });
 
     // Task completion signal
-    connect(m_pCore, &Core::finishedTask, this, [this](TaskId id, TaskType type, const QVariantList& argsList, const QVariant& result) {
+    connect(m_pCore, &Core::finishedTask, this, [this, removeTaskItemById](TaskId id, TaskType type, const QVariantList& argsList, const QVariant& result) {
         Q_UNUSED(argsList);
         QString info = QString("ID: %1, Type: %2").arg(id).arg(type);
         ui->textEdit->append(QString("Task (%1) finished.").arg(info));
@@ -217,24 +240,22 @@ MainWindow::MainWindow(QWidget *parent)
             break;
         }
 
-        // Removing an item from the task list
-        auto itemsToRemove = ui->listWidget->findItems(info, Qt::MatchContains);
-        for (auto* item : std::as_const(itemsToRemove)) { // clazy: range-loop-detach
-            delete item;
-        }
+        removeTaskItemById(id);
     });
 
     // A signal about the forced completion of a task
-    connect(m_pCore, &Core::terminatedTask, this, [this](TaskId id, TaskType type, const QVariantList& argsList) {
+    connect(m_pCore, &Core::terminatedTask, this, [this, removeTaskItemById](TaskId id, TaskType type, const QVariantList& argsList) {
         Q_UNUSED(argsList);
         QString info = QString("ID: %1, Type: %2").arg(id).arg(type);
         ui->textEdit->append(QString("Task (%1) was TERMINATED.").arg(info));
+        removeTaskItemById(id);
+    });
 
-        // Удаляем элемент из списка задач
-        auto itemsToRemove = ui->listWidget->findItems(info, Qt::MatchContains);
-        for (auto* item : std::as_const(itemsToRemove)) { // clazy: range-loop-detach
-            delete item;
-        }
+    // A signal that task did not stop within timeout
+    connect(m_pCore, &Core::stopTimedOutTask, this, [this](TaskId id, TaskType type, const QVariantList& argsList, TaskStopTimeout timeout) {
+        Q_UNUSED(argsList);
+        QString info = QString("ID: %1, Type: %2").arg(id).arg(type);
+        ui->textEdit->append(QString("Task (%1) STOP TIMED OUT after %2 ms.").arg(info).arg(timeout));
     });
 
     // --- Connecting UI buttons ---
@@ -275,14 +296,47 @@ MainWindow::MainWindow(QWidget *parent)
         bool ok;
         int group = ui->lineEditStopTaskGroup->text().toInt(&ok);
         if (ok) {
-            m_pCore->stopTaskByGroup(group);
+            m_pCore->stopTasksByGroup(group, true); // Stop by group including queued tasks
         } else {
             qDebug() << "Invalid Task Group entered.";
         }
     });
 
     connect(ui->pushButtonStopTasks, &QPushButton::clicked, this, [this]() {
-        m_pCore->stopTasks(); // Stop all active tasks
+        QMenu menu(this);
+        QAction* pStopActive = menu.addAction("Stop Active Tasks");
+        QAction* pStopAll = menu.addAction("Stop ALL Tasks (Active + Queued)");
+        menu.addSeparator();
+        QAction* pStopGroupActive = menu.addAction("Stop Active Tasks By Group");
+        QAction* pStopGroupAll = menu.addAction("Stop ALL Tasks By Group (Active + Queued)");
+
+        QAction* pSelected = menu.exec(ui->pushButtonStopTasks->mapToGlobal(QPoint(0, ui->pushButtonStopTasks->height())));
+        if (!pSelected) {
+            return;
+        }
+
+        if (pSelected == pStopActive) {
+            m_pCore->stopTasks();
+            return;
+        }
+
+        if (pSelected == pStopAll) {
+            m_pCore->stopAllTasks();
+            return;
+        }
+
+        bool ok = false;
+        int group = ui->lineEditStopTaskGroup->text().toInt(&ok);
+        if (!ok) {
+            qDebug() << "Invalid Task Group entered.";
+            return;
+        }
+
+        if (pSelected == pStopGroupActive) {
+            m_pCore->stopTasksByGroup(group, false);
+        } else if (pSelected == pStopGroupAll) {
+            m_pCore->stopTasksByGroup(group, true);
+        }
     });
 
     // --- Adding multiple tasks for demonstration ---
