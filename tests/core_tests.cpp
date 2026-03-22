@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 #include <QSignalSpy>
 #include <QThread>
+#include <QElapsedTimer>
 #include <atomic>
 
 #include "../core.h"
@@ -19,6 +20,7 @@ private slots:
     void cancelTasksByGroupAliasWorks();
     void cancelAllTasksAliasWorks();
     void unregisterTaskFailsForActiveAndQueued();
+    void registerTaskWithNullObjectThrows();
 };
 
 void CoreTests::executesRegisteredTaskAndEmitsFinished() {
@@ -194,21 +196,33 @@ void CoreTests::stopTasksBlocksQueueDuringStopAndResumesAfterActiveStops() {
     }, 33, 120);
 
     QSignalSpy finishedSpy(&core, &Core::finishedTask);
+    QSignalSpy startedSpy(&core, &Core::startedTask);
     QVERIFY(finishedSpy.isValid());
+    QVERIFY(startedSpy.isValid());
+
+    QElapsedTimer sinceStop;
+    qint64 queuedStartedAfterStopMs = -1;
+    QObject::connect(&core, &Core::startedTask, &core, [&sinceStop, &queuedStartedAfterStopMs](TaskId, TaskType, const QVariantList& argsList) {
+        if (argsList.isEmpty() || argsList.first().toInt() != 2) {
+            return;
+        }
+        if (!sinceStop.isValid()) {
+            return;
+        }
+        if (queuedStartedAfterStopMs < 0) {
+            queuedStartedAfterStopMs = sinceStop.elapsed();
+        }
+    });
 
     core.addTask(33, 1); // active
     core.addTask(34, 2); // queued in same group
 
     QTest::qWait(20);
+    sinceStop.start();
     core.stopTasks();
 
-    QTRY_VERIFY_WITH_TIMEOUT(finishedSpy.count() >= 1, 5000);
-
-    const int countAfterActiveStop = finishedSpy.count();
-    QTest::qWait(60); // less than stop timeout (120 ms): queue should still be blocked
-    QCOMPARE(finishedSpy.count(), countAfterActiveStop);
-
     QTRY_COMPARE_WITH_TIMEOUT(finishedSpy.count(), 2, 5000);
+    QVERIFY(queuedStartedAfterStopMs >= 100);
 
     bool activeStopped = false;
     bool queuedResumed = false;
@@ -419,6 +433,26 @@ void CoreTests::unregisterTaskFailsForActiveAndQueued() {
     QVERIFY(finishedSpy.isValid());
     core.stopAllTasks();
     QTRY_VERIFY_WITH_TIMEOUT(finishedSpy.count() >= 2, 5000);
+}
+
+void CoreTests::registerTaskWithNullObjectThrows() {
+    class LocalCalculator {
+    public:
+        int add(int a, int b) { return a + b; }
+    };
+
+    Core core;
+    LocalCalculator* pNullObj = nullptr;
+
+    bool thrown = false;
+    try {
+        core.registerTask(70, &LocalCalculator::add, pNullObj);
+    } catch (const std::logic_error&) {
+        thrown = true;
+    }
+
+    QVERIFY(thrown);
+    QVERIFY(!core.isTaskRegistered(70));
 }
 
 QTEST_MAIN(CoreTests)
