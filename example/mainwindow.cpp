@@ -175,6 +175,9 @@ MainWindow::MainWindow(QWidget *parent)
         pMainSplitter->setSizes({240, 320});
     }
 
+    addLog(LogKind::Info, QString("Force termination is %1.")
+                              .arg(m_pCore->allowForceTermination() ? "enabled" : "disabled"));
+
     auto removeTaskItemById = [this, RoleTaskId](TaskId taskId) {
         for (int i = 0; i < ui->listWidget->count(); ++i) {
             QListWidgetItem* item = ui->listWidget->item(i);
@@ -429,8 +432,13 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
-    connect(ui->pushButtonStopTasks, &QPushButton::clicked, this, [this]() {
+    connect(ui->pushButtonStopTasks, &QPushButton::clicked, this, [this, addLog]() {
         QMenu menu(this);
+        QAction* pAllowForceTerminate = menu.addAction("Allow Force Termination");
+        pAllowForceTerminate->setCheckable(true);
+        pAllowForceTerminate->setChecked(m_pCore->allowForceTermination());
+        menu.addSeparator();
+
         QAction* pStopActive = menu.addAction("Cancel Active Tasks");
         QAction* pStopAll = menu.addAction("Cancel ALL Tasks (Active + Queued)");
         menu.addSeparator();
@@ -439,6 +447,14 @@ MainWindow::MainWindow(QWidget *parent)
 
         QAction* pSelected = menu.exec(ui->pushButtonStopTasks->mapToGlobal(QPoint(0, ui->pushButtonStopTasks->height())));
         if (!pSelected) {
+            return;
+        }
+
+        if (pSelected == pAllowForceTerminate) {
+            const bool enabled = pAllowForceTerminate->isChecked();
+            m_pCore->setAllowForceTermination(enabled);
+            addLog(LogKind::Info, QString("Force termination %1.")
+                                      .arg(enabled ? "enabled" : "disabled"));
             return;
         }
 
