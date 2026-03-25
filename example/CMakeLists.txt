@@ -17,8 +17,14 @@ add_executable(ExampleApp
     ../core.h
 )
 
+add_executable(ExampleConsoleApp
+    console_main.cpp
+    ../core.h
+)
+
 # Adding the directory with core.h in the header search path
 target_include_directories(ExampleApp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_include_directories(ExampleConsoleApp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 # Connecting the Qt libraries
 target_link_libraries(ExampleApp PRIVATE
@@ -27,8 +33,13 @@ target_link_libraries(ExampleApp PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
 )
 
+target_link_libraries(ExampleConsoleApp PRIVATE
+    Qt${QT_VERSION_MAJOR}::Core
+)
+
 # Setting the C++ standard
 target_compile_features(ExampleApp PRIVATE cxx_std_17)
+target_compile_features(ExampleConsoleApp PRIVATE cxx_std_17)
 
 # Checking core.h
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../core.h")

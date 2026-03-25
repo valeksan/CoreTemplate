@@ -97,6 +97,8 @@ See **example/** directory for a full Qt Widgets app demonstrating all features.
 
 *For Qt6, it is preferable to use **CMakeLists.txt** when opening a project, and if Qt5 then **example_app.pro**.*
 
+If you need a minimal non-GUI start, use `example/console_main.cpp` (`ExampleConsoleApp` target in CMake).
+
 ![example app screenshot](example/example_app_screenshot.jpg)
 
 ## Architecture and Usage Rules
