@@ -54,6 +54,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_pCore(new Core(this))
 {
     ui->setupUi(this);
+    m_pCore->setAllowForceTermination(true); // Example app intentionally demonstrates terminate behavior.
 
     constexpr int RoleTaskId = Qt::UserRole + 1;
     constexpr int RoleTaskType = Qt::UserRole + 2;

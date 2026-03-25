@@ -155,6 +155,8 @@ public:
     void cancelAllTasks();
     void cancelTasksByGroup(TaskGroup group, bool includeQueued);
     void terminateTaskById(TaskId id);
+    void setAllowForceTermination(bool allow);
+    bool allowForceTermination() const;
     void stopTaskById(TaskId id);
     void stopTaskByType(TaskType type);
     void stopTaskByGroup(TaskGroup group);
@@ -228,6 +230,7 @@ private:
     QList<QSharedPointer<Task>> m_activeTaskList;
     QList<QSharedPointer<Task>> m_queuedTaskList;
     std::atomic_bool m_blockStartTask{false};
+    bool m_allowForceTermination = false;
 
 signals:
     void finishedTask(TaskId id, TaskType type, QList<QVariant> argsList = {}, QVariant result = QVariant());
@@ -344,10 +347,15 @@ inline Core::~Core() {
         return;
     }
 
-    // Escalate only for stubborn tasks that ignored cooperative stop.
-    const auto stubbornTasks = m_activeTaskList;
-    for (const auto& pTask : stubbornTasks) {
-        terminateTask(pTask);
+    // Escalate only for stubborn tasks that ignored cooperative stop and only if force termination is allowed.
+    if (m_allowForceTermination) {
+        const auto stubbornTasks = m_activeTaskList;
+        for (const auto& pTask : stubbornTasks) {
+            terminateTask(pTask);
+        }
+    } else {
+        qWarning() << "Core::~Core - force termination disabled. Active tasks may outlive shutdown window.";
+        return;
     }
 
     while (!m_activeTaskList.isEmpty() && waitTimer.elapsed() < (kDtorWaitMs * 2)) {
@@ -515,8 +523,27 @@ inline void Core::terminateTaskById(TaskId id) {
     }
 
     if (auto pTask = activeTaskById(id); !pTask.isNull()) {
+        if (!m_allowForceTermination) {
+            qWarning() << "Core::terminateTaskById - force termination is disabled. Requesting cooperative stop for task ID:" << id;
+            stopTaskById(id);
+            return;
+        }
         terminateTask(std::move(pTask));
     }
+}
+
+inline void Core::setAllowForceTermination(bool allow) {
+    if (!ensureCalledFromOwnerThread("setAllowForceTermination")) {
+        return;
+    }
+    m_allowForceTermination = allow;
+}
+
+inline bool Core::allowForceTermination() const {
+    if (!ensureCalledFromOwnerThread("allowForceTermination")) {
+        return false;
+    }
+    return m_allowForceTermination;
 }
 
 inline void Core::cancelTaskById(TaskId id) {
@@ -899,7 +926,7 @@ inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
         qWarning() << "Core::stopTask - Missing registration for active task type:" << pTask->m_type;
     }
 
-    QTimer::singleShot(timeout, this, [this, pTask]() {
+    QTimer::singleShot(timeout, this, [this, pTask, timeout]() {
         switch (pTask->m_state) {
         case TaskState::Finished:
             qDebug() << QString("Task %1 was successfully stopped").arg(QString::number(pTask->m_id));
@@ -912,6 +939,12 @@ inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
             break;
         case TaskState::StopRequested:
         case TaskState::Active:
+            if (!m_allowForceTermination) {
+                pTask->m_state = TaskState::StopTimedOut;
+                qWarning() << QString("Task %1 stop timed out; force termination is disabled").arg(QString::number(pTask->m_id));
+                emit stopTimedOutTask(pTask->m_id, pTask->m_type, pTask->m_argsList, timeout);
+                break;
+            }
             qDebug() << QString("Task %1 was not stopped, terminating").arg(QString::number(pTask->m_id));
             terminateTask(pTask);
             if (pTask->m_state == TaskState::Active || pTask->m_state == TaskState::StopRequested) {

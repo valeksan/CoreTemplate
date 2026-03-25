@@ -22,6 +22,7 @@ private slots:
     void unregisterTaskFailsForActiveAndQueued();
     void registerTaskWithNullObjectThrows();
     void destroyingCoreRequestsStopAndWaitsForActiveTask();
+    void terminateTaskByIdWhenForceDisabledRequestsCooperativeStopOnly();
     void terminateTaskByIdForceStopsNonCooperativeTask();
 };
 
@@ -481,8 +482,43 @@ void CoreTests::destroyingCoreRequestsStopAndWaitsForActiveTask() {
     QVERIFY(taskFinished.load());
 }
 
+void CoreTests::terminateTaskByIdWhenForceDisabledRequestsCooperativeStopOnly() {
+    Core core;
+
+    core.registerTask(82, []() -> int {
+        for (int i = 0; i < 2000; ++i) {
+            QThread::msleep(2);
+        }
+        return 82;
+    }, 82, 80);
+
+    QSignalSpy startedSpy(&core, &Core::startedTask);
+    QSignalSpy stopTimedOutSpy(&core, &Core::stopTimedOutTask);
+    QSignalSpy terminatedSpy(&core, &Core::terminatedTask);
+    QVERIFY(startedSpy.isValid());
+    QVERIFY(stopTimedOutSpy.isValid());
+    QVERIFY(terminatedSpy.isValid());
+
+    core.addTask(82);
+    QTRY_COMPARE_WITH_TIMEOUT(startedSpy.count(), 1, 2000);
+    const QList<QVariant> startedEvent = startedSpy.takeFirst();
+    const auto id = static_cast<TaskId>(startedEvent.at(0).toLongLong());
+
+    core.terminateTaskById(id);
+
+    QTRY_COMPARE_WITH_TIMEOUT(stopTimedOutSpy.count(), 1, 3000);
+    QCOMPARE(terminatedSpy.count(), 0);
+    QVERIFY(!core.isIdle());
+
+    core.setAllowForceTermination(true);
+    core.terminateTaskById(id);
+    QTRY_COMPARE_WITH_TIMEOUT(terminatedSpy.count(), 1, 3000);
+    QVERIFY(core.isIdle());
+}
+
 void CoreTests::terminateTaskByIdForceStopsNonCooperativeTask() {
     Core core;
+    core.setAllowForceTermination(true);
 
     core.registerTask(81, []() -> int {
         for (int i = 0; i < 600; ++i) {
@@ -514,5 +550,4 @@ void CoreTests::terminateTaskByIdForceStopsNonCooperativeTask() {
 
 QTEST_MAIN(CoreTests)
 #include "core_tests.moc"
-
 
