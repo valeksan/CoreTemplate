@@ -25,6 +25,8 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QThread>
+#include <QCoreApplication>
+#include <QEventLoop>
 
 // --- Threading/Multiprocessing API Headers ---
 #ifdef Q_OS_WIN
@@ -90,18 +92,21 @@ class TaskHelper final : public QObject {
     Q_OBJECT
 
 public:
-    explicit TaskHelper(std::function<QVariant()> function, std::atomic_bool* pStopFlag, QObject* parent = nullptr);
+    explicit TaskHelper(std::function<QVariant()> function, std::atomic_bool* pStopFlag, std::atomic_bool* pThreadExited, QObject* parent = nullptr);
 
 #ifdef Q_OS_WIN
     static DWORD WINAPI functionWrapper(void* pTaskHelper);
 #else
     static void* functionWrapper(void* pTaskHelper);
+    static void cleanupThreadExit(void* pTaskHelper) noexcept;
 #endif
 
 private:
     std::function<QVariant()> m_function;
     std::atomic_bool* m_pStopFlag = nullptr;
+    std::atomic_bool* m_pThreadExited = nullptr;
     void execute(); // Method declaration
+    void markThreadExited() noexcept;
 
 signals:
     void finished(QVariant result);
@@ -119,6 +124,7 @@ class Core : public QObject {
 
 public:
     explicit Core(QObject* parent = nullptr);
+    ~Core() override;
 
     template <typename R, typename... Args>
     void registerTask(TaskType taskType, std::function<R(Args...)> taskFunction, TaskGroup taskGroup = 0, TaskStopTimeout taskStopTimeout = kDefaultStopTimeout);
@@ -201,6 +207,7 @@ private:
         pthread_t m_threadHandle = 0;
     #endif
         std::atomic_bool m_stopFlag{false};
+        std::atomic_bool m_threadExited{false};
         TaskState m_state;
     };
 
@@ -233,8 +240,14 @@ signals:
 // --- Class method implementations *after* class declarations ---
 
 // TaskHelper Implementation
-inline TaskHelper::TaskHelper(std::function<QVariant()> function, std::atomic_bool* pStopFlag, QObject* parent)
-    : QObject(parent), m_function(function), m_pStopFlag(pStopFlag) {}
+inline TaskHelper::TaskHelper(std::function<QVariant()> function, std::atomic_bool* pStopFlag, std::atomic_bool* pThreadExited, QObject* parent)
+    : QObject(parent), m_function(function), m_pStopFlag(pStopFlag), m_pThreadExited(pThreadExited) {}
+
+inline void TaskHelper::markThreadExited() noexcept {
+    if (m_pThreadExited) {
+        m_pThreadExited->store(true);
+    }
+}
 
 inline void TaskHelper::execute() {
     core_detail::g_currentStopFlag = m_pStopFlag;
@@ -243,9 +256,11 @@ inline void TaskHelper::execute() {
         result = m_function();
     } catch (...) {
         core_detail::g_currentStopFlag = nullptr;
+        markThreadExited();
         throw;
     }
     core_detail::g_currentStopFlag = nullptr;
+    markThreadExited();
     emit finished(result);
 }
 
@@ -256,9 +271,26 @@ inline DWORD TaskHelper::functionWrapper(void* pTaskHelper) {
     return 0;
 }
 #else
+inline void TaskHelper::cleanupThreadExit(void* pTaskHelper) noexcept {
+    TaskHelper *pThisTaskHelper = reinterpret_cast<TaskHelper *>(pTaskHelper);
+    if (pThisTaskHelper) {
+        pThisTaskHelper->markThreadExited();
+    }
+}
+
 inline void* TaskHelper::functionWrapper(void* pTaskHelper) {
-    TaskHelper *pThisTaskHelper = qobject_cast<TaskHelper *>(reinterpret_cast<QObject *>(pTaskHelper));
-    if (pThisTaskHelper) pThisTaskHelper->execute();
+#if defined(PTHREAD_CANCEL_ENABLE) && defined(PTHREAD_CANCEL_ASYNCHRONOUS)
+    // Terminate path uses pthread_cancel; asynchronous cancellation makes forced stop predictable
+    // for non-cooperative tasks (terminateTaskById), while cooperative stop remains unchanged.
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, nullptr);
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, nullptr);
+#endif
+    TaskHelper *pThisTaskHelper = reinterpret_cast<TaskHelper *>(pTaskHelper);
+    if (pThisTaskHelper) {
+        pthread_cleanup_push(&TaskHelper::cleanupThreadExit, pThisTaskHelper);
+        pThisTaskHelper->execute();
+        pthread_cleanup_pop(1);
+    }
     return nullptr;
 }
 #endif
@@ -266,6 +298,67 @@ inline void* TaskHelper::functionWrapper(void* pTaskHelper) {
 // Core Implementation
 inline Core::Core(QObject* parent)
     : QObject(parent) {}
+
+inline Core::~Core() {
+    // Best-effort synchronous shutdown to avoid destroying QObject children while worker threads are still running.
+    if (QThread::currentThread() != thread()) {
+        qWarning() << "Core::~Core - called from non-owner thread. owner =" << thread()
+                   << ", current =" << QThread::currentThread()
+                   << ". Forcing stop flags only.";
+        for (const auto& pTask : std::as_const(m_activeTaskList)) {
+            pTask->m_stopFlag.store(true);
+        }
+        return;
+    }
+
+    // Remove queued tasks first: they never started.
+    for (const auto& pQueuedTask : std::as_const(m_queuedTaskList)) {
+        emit terminatedTask(pQueuedTask->m_id, pQueuedTask->m_type, pQueuedTask->m_argsList);
+    }
+    m_queuedTaskList.clear();
+
+    if (m_activeTaskList.isEmpty()) {
+        return;
+    }
+
+    // Block new starts and request cooperative stop for all active tasks.
+    m_blockStartTask.store(true);
+    for (const auto& pTask : std::as_const(m_activeTaskList)) {
+        pTask->m_stopFlag.store(true);
+        if (pTask->m_state == TaskState::Active) {
+            pTask->m_state = TaskState::StopRequested;
+            emit stopRequestedTask(pTask->m_id, pTask->m_type, pTask->m_argsList);
+        }
+    }
+
+    QElapsedTimer waitTimer;
+    waitTimer.start();
+    constexpr TaskStopTimeout kDtorWaitMs = 2000;
+
+    while (!m_activeTaskList.isEmpty() && waitTimer.elapsed() < kDtorWaitMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QThread::msleep(1);
+    }
+
+    if (m_activeTaskList.isEmpty()) {
+        return;
+    }
+
+    // Escalate only for stubborn tasks that ignored cooperative stop.
+    const auto stubbornTasks = m_activeTaskList;
+    for (const auto& pTask : stubbornTasks) {
+        terminateTask(pTask);
+    }
+
+    while (!m_activeTaskList.isEmpty() && waitTimer.elapsed() < (kDtorWaitMs * 2)) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QThread::msleep(1);
+    }
+
+    if (!m_activeTaskList.isEmpty()) {
+        qWarning() << "Core::~Core - active tasks still present after shutdown timeout:" << m_activeTaskList.size();
+    }
+}
 
 inline bool Core::ensureCalledFromOwnerThread(const char* method) const {
     if (QThread::currentThread() == thread()) {
@@ -702,17 +795,29 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
         if (WaitForSingleObject(pTask->m_threadHandle, 0) != WAIT_OBJECT_0) {
             terminationRequested = (TerminateThread(pTask->m_threadHandle, 1) != 0);
         } else {
-            return; // already exited; finished path will handle cleanup
+            // Thread already exited, but finishedTask might never be emitted (e.g. forceful exit path).
+            pTask->m_state = TaskState::Terminated;
+            CloseHandle(pTask->m_threadHandle);
+            pTask->m_threadHandle = nullptr;
+            emit terminatedTask(pTask->m_id, pTask->m_type, pTask->m_argsList);
+            m_activeTaskList.removeAll(pTask);
+            startQueuedTask();
+            return;
         }
     } else {
         return; // no valid handle
     }
 #else
     if (pTask->m_threadHandle != 0) {
-        if (pthread_kill(pTask->m_threadHandle, 0) == 0) {
+        if (!pTask->m_threadExited.load()) {
             terminationRequested = (pthread_cancel(pTask->m_threadHandle) == 0);
         } else {
-            return; // already not alive; finished path will handle cleanup
+            // Thread already not alive, but finishedTask might never be emitted (e.g. pthread_exit/cancel path).
+            pTask->m_state = TaskState::Terminated;
+            emit terminatedTask(pTask->m_id, pTask->m_type, pTask->m_argsList);
+            m_activeTaskList.removeAll(pTask);
+            startQueuedTask();
+            return;
         }
     } else {
         return; // no valid handle
@@ -749,7 +854,7 @@ inline void Core::terminateTask(QSharedPointer<Core::Task> pTask) {
         }
 #else
         if (pTask->m_threadHandle != 0) {
-            isAlive = (pthread_kill(pTask->m_threadHandle, 0) == 0);
+            isAlive = !pTask->m_threadExited.load();
         }
 #endif
 
@@ -824,7 +929,8 @@ inline void Core::stopTask(QSharedPointer<Core::Task> pTask) {
 inline void Core::startTask(QSharedPointer<Core::Task> pTask) {
     m_activeTaskList.append(pTask);
     pTask->m_state = TaskState::Active;
-    TaskHelper* pTaskHelper = new TaskHelper(pTask->m_functionBound, &pTask->m_stopFlag, this); // Add with parent!
+    pTask->m_threadExited.store(false);
+    TaskHelper* pTaskHelper = new TaskHelper(pTask->m_functionBound, &pTask->m_stopFlag, &pTask->m_threadExited, this); // Add with parent!
 
     connect(pTaskHelper, &TaskHelper::finished, this, [this, pTask, pTaskHelper](QVariant result) {
         pTask->m_state = TaskState::Finished;
@@ -901,4 +1007,3 @@ void Core::insertToTaskHash(TaskType taskType, std::function<QVariant(Args...)> 
 }
 
 #endif // CORE_H
-

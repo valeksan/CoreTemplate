@@ -21,6 +21,8 @@ private slots:
     void cancelAllTasksAliasWorks();
     void unregisterTaskFailsForActiveAndQueued();
     void registerTaskWithNullObjectThrows();
+    void destroyingCoreRequestsStopAndWaitsForActiveTask();
+    void terminateTaskByIdForceStopsNonCooperativeTask();
 };
 
 void CoreTests::executesRegisteredTaskAndEmitsFinished() {
@@ -455,10 +457,62 @@ void CoreTests::registerTaskWithNullObjectThrows() {
     QVERIFY(!core.isTaskRegistered(70));
 }
 
+void CoreTests::destroyingCoreRequestsStopAndWaitsForActiveTask() {
+    std::atomic_bool taskFinished{false};
+
+    {
+        Core core;
+        core.registerTask(80, [&core, &taskFinished]() -> int {
+            for (int i = 0; i < 3000; ++i) {
+                if (auto* stop = core.stopTaskFlag(); stop && stop->load()) {
+                    taskFinished.store(true);
+                    return -80;
+                }
+                QThread::msleep(1);
+            }
+            taskFinished.store(true);
+            return 80;
+        }, 80, 100);
+
+        core.addTask(80);
+        QTest::qWait(20);
+    }
+
+    QVERIFY(taskFinished.load());
+}
+
+void CoreTests::terminateTaskByIdForceStopsNonCooperativeTask() {
+    Core core;
+
+    core.registerTask(81, []() -> int {
+        for (int i = 0; i < 600; ++i) {
+            QThread::msleep(10);
+        }
+        return 81;
+    }, 81, 200);
+
+    QSignalSpy startedSpy(&core, &Core::startedTask);
+    QSignalSpy finishedSpy(&core, &Core::finishedTask);
+    QSignalSpy terminatedSpy(&core, &Core::terminatedTask);
+    QVERIFY(startedSpy.isValid());
+    QVERIFY(finishedSpy.isValid());
+    QVERIFY(terminatedSpy.isValid());
+
+    core.addTask(81);
+    QTRY_COMPARE_WITH_TIMEOUT(startedSpy.count(), 1, 2000);
+
+    const QList<QVariant> startedEvent = startedSpy.takeFirst();
+    const auto id = static_cast<TaskId>(startedEvent.at(0).toLongLong());
+
+    QTest::qWait(30);
+    core.terminateTaskById(id);
+
+    QTRY_COMPARE_WITH_TIMEOUT(terminatedSpy.count(), 1, 3000);
+    QVERIFY(finishedSpy.count() == 0 || finishedSpy.count() == 1);
+    QVERIFY(core.isIdle());
+}
+
 QTEST_MAIN(CoreTests)
 #include "core_tests.moc"
-
-
-
 
 
