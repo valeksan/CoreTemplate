@@ -63,3 +63,5 @@ IMPROVEMENT_PLAN_RU.md
 tests/build/
 tests/.qtcreator/
 tests/*.user
+.vscode/launch.json
+.vscode/settings.json

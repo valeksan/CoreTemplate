@@ -20,16 +20,21 @@ on:
 
 jobs:
   build:
-    # Run on Linux and macOS
+    # Run on Linux, macOS and Windows
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         # Define Qt architecture for each OS
         include:
           - os: ubuntu-latest
+            qt_host: 'linux'
             qt_arch: 'linux_gcc_64'        # For Linux
           - os: macos-latest
+            qt_host: 'mac'
             qt_arch: 'clang_64'            # For macOS
+          - os: windows-latest
+            qt_host: 'windows'
+            qt_arch: 'win64_msvc2022_64'   # For Windows (MSVC 2022)
 
     runs-on: ${{ matrix.os }}
 
@@ -41,7 +46,7 @@ jobs:
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.10.2'
-        host: ${{ matrix.os == 'ubuntu-latest' && 'linux' || 'mac' }}
+        host: ${{ matrix.qt_host }}
         target: 'desktop'
         arch: ${{ matrix.qt_arch }}
         modules: ''
@@ -58,6 +63,11 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         brew install cmake ninja
+
+    - name: Install Ninja (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install ninja -y
 
     # Build the example
     - name: Build Example App

@@ -129,7 +129,7 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 
 - **Platform Specifics:** The library uses `CreateThread` on Windows and `pthread_create` (detached) on Unix-like systems for low-level thread management.
 - **Thread Safety:** The `Core` object itself is designed to be used from the main thread (or a single managing thread). Its methods for adding/stopping tasks are called from the main thread, and its signals are emitted from the main thread context. Access to the internal stop flag (`Core::stopTaskFlag()`) is thread-local and intended for use *within* the executing task's thread.
-- **Cancellation vs Termination:** use `cancelTaskById`/`stop...` methods for cooperative stop requests. `terminateTaskById` is a stronger path: it first requests cooperative stop, then attempts force-termination after timeout. On timeout without actual stop, `stopTimedOutTask` is emitted; if force-termination succeeds, `terminatedTask` is emitted.
+- **Cancellation vs Termination:** prefer `cancelTaskById`/`stop...` methods for cooperative stop requests. `terminateTaskById` is an emergency path that relies on forceful platform APIs and can interrupt execution abruptly. Use it only when cooperative stop cannot be used. On timeout without actual stop, `stopTimedOutTask` is emitted; if force-termination succeeds, `terminatedTask` is emitted.
 - **Header-Only:** The library is implemented entirely within `core.h` as an inline/header-only library.
 - **Requirements:** Requires Qt 5.12 or later (tested with Qt 6.10.2) and C++17 support.
 
