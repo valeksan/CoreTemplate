@@ -34,7 +34,7 @@ jobs:
             qt_arch: 'clang_64'            # For macOS
           - os: windows-latest
             qt_host: 'windows'
-            qt_arch: 'win64_msvc2022_64'   # For Windows (MSVC 2022)
+            qt_arch: 'win64_mingw'         # For Windows (MinGW)
 
     runs-on: ${{ matrix.os }}
 
