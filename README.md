@@ -16,6 +16,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Example](#-example)
 - [Architecture and Usage Rules](#architecture-and-usage-rules)
 - [Public Methods](#public-methods)
+- [Migration and Safety Defaults](#migration-and-safety-defaults)
 - [Threading Model](#threading-model)
 - [Safety Considerations](#safety-considerations)
 - [How It Works](#how-it-works)
@@ -124,6 +125,18 @@ The complete listing is defined in the header file `core.h`. Refer to the source
 - `isTaskRegistered`, `isIdle`, `isTaskAddedByType`, `isTaskAddedByGroup`: Query task status.
 - `groupByTask`: Get the group associated with a task type.
 - `stopTaskFlag`: Returns a thread-local flag pointer for the currently executing task thread; use it inside task code for cooperative stopping.
+
+## Migration and Safety Defaults
+
+- Force termination is disabled by default (`allowForceTermination() == false`).
+- Calling `terminateTaskById` with force disabled requests cooperative stop only.
+- To opt in to emergency force termination, call:
+
+```cpp
+core.setAllowForceTermination(true);
+```
+
+- Recommended migration: prefer `cancel...`/`stop...` methods and enable force termination only in controlled contexts where abrupt interruption is acceptable.
 
 ## 🧵 Threading Model
 
