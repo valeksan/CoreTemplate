@@ -54,7 +54,6 @@ compile_commands.json
 build/
 CMakeCache.txt
 CMakeFiles/
-*.cmake
 .vscode/c_cpp_properties.json
 example/.qmake.stash
 example/release/ExampleApp.exe
