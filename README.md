@@ -48,6 +48,7 @@ Just copy `core.h` into your project. It's header‑only!
 Or use CMake integration from this repository root:
 
 ```cmake
+set(CMAKE_AUTOMOC ON)
 add_subdirectory(CoreTemplate)
 target_link_libraries(your_target PRIVATE CoreTemplate::CoreTemplate)
 ```
@@ -61,6 +62,7 @@ cmake --install build
 ```
 
 ```cmake
+set(CMAKE_AUTOMOC ON)
 find_package(CoreTemplate REQUIRED)
 target_link_libraries(your_target PRIVATE CoreTemplate::CoreTemplate)
 ```

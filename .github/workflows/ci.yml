@@ -83,3 +83,18 @@ jobs:
     - name: Run Tests
       run: |
         ctest --test-dir tests/build --output-on-failure
+
+    - name: Install CoreTemplate Package
+      run: |
+        cmake -S . -B build/package -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        cmake --build build/package
+        cmake --install build/package --prefix build/install
+
+    - name: Build Package Smoke Consumer
+      run: |
+        cmake -S tests/package_smoke -B tests/package_smoke/build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}/build/install"
+        cmake --build tests/package_smoke/build
+
+    - name: Run Package Smoke Consumer
+      run: |
+        ctest --test-dir tests/package_smoke/build --output-on-failure
