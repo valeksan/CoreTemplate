@@ -45,6 +45,26 @@ Make sure you have **Qt 5.12 or later** and a **C++17 compatible compiler** (see
 
 Just copy `core.h` into your project. It's header‑only!
 
+Or use CMake integration from this repository root:
+
+```cmake
+add_subdirectory(CoreTemplate)
+target_link_libraries(your_target PRIVATE CoreTemplate::CoreTemplate)
+```
+
+Install and consume via `find_package`:
+
+```bash
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=/your/prefix
+cmake --build build
+cmake --install build
+```
+
+```cmake
+find_package(CoreTemplate REQUIRED)
+target_link_libraries(your_target PRIVATE CoreTemplate::CoreTemplate)
+```
+
 ### Quick Start
 
 ```cpp
