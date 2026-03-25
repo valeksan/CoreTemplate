@@ -2,7 +2,11 @@ cmake_minimum_required(VERSION 3.16)
 
 project(ExampleApp LANGUAGES CXX)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets)
 
 # Creating an executable file
 add_executable(ExampleApp
@@ -17,12 +21,10 @@ add_executable(ExampleApp
 target_include_directories(ExampleApp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 # Connecting the Qt libraries
-target_link_libraries(ExampleApp PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
-
-# Enabling automatic generation
-set_target_properties(ExampleApp PROPERTIES
-    AUTOMOC ON
-    AUTOUIC ON
+target_link_libraries(ExampleApp PRIVATE
+    Qt${QT_VERSION_MAJOR}::Core
+    Qt${QT_VERSION_MAJOR}::Gui
+    Qt${QT_VERSION_MAJOR}::Widgets
 )
 
 # Setting the C++ standard
