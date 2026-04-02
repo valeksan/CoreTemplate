@@ -6,8 +6,6 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-C++17-blue.svg)](https://en.cppreference.com/w/cpp/17)
 [![Qt](https://img.shields.io/badge/Qt-5.12+-green.svg)](https://www.qt.io/)
-Этот проект распространяется под лицензией MIT — подробности см. в файле LICENSE.
-
 
 *[English version](README.md)*
 ## Содержание
