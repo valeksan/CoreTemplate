@@ -6,7 +6,6 @@ A modern, header-only C++/Qt library for **safe and efficient task execution in 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-C++17-blue.svg)](https://en.cppreference.com/w/cpp/17)
 [![Qt](https://img.shields.io/badge/Qt-5.12+-green.svg)](https://www.qt.io/)
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 *[Русская версия](README_RU.md)*
 ## Table of Contents
